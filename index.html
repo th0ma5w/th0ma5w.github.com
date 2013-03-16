@@ -1,0 +1,165 @@
+<html><head>
+		<style>
+			body {
+				background-color: #92AAAA;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			a {
+				color:#0078ff;
+			}
+                        .thomas {position: float; z-index 1000;}
+		</style>
+</head>
+<body>
+<script src="three.min.js"></script>
+<script src="OrbitControls.js"></script>
+<script src="data.js"></script>
+<script>
+
+Array.prototype.unique = function(a){
+return function(){return this.filter(a)}}(function(a,b,c){return c.indexOf(a,b+1)<0
+});
+
+
+var mouseX = 0, mouseY = 0, geometry, 
+windowHalfX = window.innerWidth / 2,
+windowHalfY = window.innerHeight / 2,
+cursor=0,
+jitter=0,
+camera, scene, renderer;
+
+
+var PI2 = Math.PI * 2;
+var material = new THREE.ParticleCanvasMaterial( {
+	color: 0xffffff,
+	program: function ( context ) {
+		context.beginPath();
+		context.arc( 0, 0, 2, 0, PI2, true );
+		context.closePath();
+		context.fill();
+	}
+} );
+
+
+init();
+
+animate();
+
+
+function init() {
+container = document.createElement('div');
+document.body.appendChild(container);
+camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 10000 );
+camera.position.z = 5000;
+
+controls = new THREE.OrbitControls( camera );
+controls.addEventListener( 'change', render );
+
+controls.object.rotation.x = 0.7202988449253946;
+controls.object.rotation.y = 1.459534030409134;
+controls.object.rotation.z = -0.7172251770461249;
+controls.object.position.x = 1378.3720271265904;
+controls.object.position.y = -101.57756118723226;
+controls.object.position.z = 115.74513301220261;
+
+
+
+scene = new THREE.Scene();
+// renderer = new THREE.CanvasRenderer();
+renderer = new THREE.WebGLRenderer( { antialias: true });
+renderer.setSize( window.innerWidth, window.innerHeight );
+container.appendChild( renderer.domElement );
+
+
+
+
+window.addEventListener( 'resize', onWindowResize, false );
+
+}
+
+
+function onWindowResize() {
+	camera.aspect = window.innerWidth / window.innerHeight;
+	camera.updateProjectionMatrix();
+	renderer.setSize( window.innerWidth, window.innerHeight );
+	render();
+}
+
+function animate(){
+	update_scene();
+	requestAnimationFrame( animate );
+	cursor = cursor + 30;
+	if (cursor > point_data[0].length-501) {cursor = 0;}
+	controls.update();
+	render();
+}
+
+
+function make_jitter(g){
+    if (cursor>1) {	
+    if (jitter == 0) {
+      var m = new THREE.Matrix4();
+      m.makeRotationY(0.005);
+      g.applyMatrix(m);
+    jitter = 1;
+    } else {
+      var m = new THREE.Matrix4();
+      m.makeRotationY(-0.005);
+      g.applyMatrix(m);
+    jitter = 0;
+    }
+  }
+}
+
+
+function update_scene(){
+  max_width = Math.max.apply(null,point_data[0].map(function(x){return x[0]}));
+  scene = new THREE.Scene();
+  plane = new THREE.Mesh(new THREE.PlaneGeometry(max_width+10000,max_width+10000), new THREE.MeshBasicMaterial({
+            color: 0x229922
+        }));
+  //plane.position.x -= 1847;
+  //plane.position.x -= 1903;
+  plane.rotation.x += -Math.PI/2.0;
+  plane.position.y -= 225;
+  plane.overdraw = true;
+  scene.add(plane);
+  this_slice = point_data[0].slice(cursor,cursor+500)
+  these_planes = this_slice.map(function(x){return x[3]}).unique()
+  for (var i = 0; i < these_planes.length; i++) {
+    this_line = this_slice.filter(function(x){return x[3]==these_planes[i]});
+    var geometry = new THREE.Geometry();
+    for (var j = 0; j < this_line.length; j++) {
+      geometry.vertices.push(new THREE.Vector3(this_line[j][0]-1847,
+                                                this_line[j][2]-225,
+                                                this_line[j][1]-1903));
+	
+    }
+    //geometry=make_jitter(geometry);
+    scene.add(new THREE.Line(geometry,
+                             new THREE.LineBasicMaterial({color: 0xffffff, opacity: 0.5})));
+    var geometry = new THREE.Geometry();
+    for (var j = 0; j < this_line.length; j++) {
+      geometry.vertices.push(new THREE.Vector3(this_line[j][0]-1847,
+                                                -224,
+                                                this_line[j][1]-1903));
+	
+    }
+    //geometry=make_jitter(geometry);
+    scene.add(new THREE.Line(geometry,
+                             new THREE.LineBasicMaterial({color: 0x000000, opacity: 0.5})));
+  }
+make_jitter(scene); 
+  
+}
+
+function render() {
+	renderer.render( scene, camera );
+}
+
+</script>
+<div id="label">Thomas</div>
+</body>
+</html>
