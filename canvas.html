@@ -67,8 +67,8 @@ controls.object.position.z = 115.74513301220261;
 
 
 scene = new THREE.Scene();
-// renderer = new THREE.CanvasRenderer();
-renderer = new THREE.WebGLRenderer( { antialias: true });
+renderer = new THREE.CanvasRenderer();
+//renderer = new THREE.WebGLRenderer( { antialias: true });
 renderer.setSize( window.innerWidth, window.innerHeight );
 container.appendChild( renderer.domElement );
 
@@ -160,6 +160,6 @@ function render() {
 }
 
 </script>
-Requires WebGL. Try the <a href="canvas.html">Canvas</a> version.
+<div id="label">Thomas</div>
 </body>
 </html>
