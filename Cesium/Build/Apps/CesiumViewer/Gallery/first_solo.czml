@@ -13,72 +13,38 @@
  {
   "name": "N178CT", 
   "id": "Aircraft/N178CT", 
-  "cone": {
-   "capMaterial": {
-    "solidColor": {
-     "color": {
-      "rgba": [
-       0, 
-       255, 
-       255, 
-       102
-      ]
-     }
+  "label": {
+   "style": "FILL_AND_OUTLINE", 
+   "scale": 0.5, 
+   "fillColor": [
+    {
+     "interval": "2014-03-09T10:18:33-04:00/2014-03-09T11:43:00-04:00", 
+     "rgba": [
+      255, 
+      255, 
+      0, 
+      255
+     ]
     }
-   }, 
-   "outerHalfAngle": 0.5235987755982988, 
-   "minimumClockAngle": 0.7853981633974483, 
-   "outerMaterial": {
-    "solidColor": {
-     "color": {
-      "rgba": [
-       0, 
-       255, 
-       255, 
-       102
-      ]
-     }
-    }
-   }, 
-   "radius": 100000.0, 
+   ], 
+   "horizontalOrigin": "LEFT", 
    "show": [
     {
      "boolean": true, 
-     "interval": "2014-03-09T10:18:33-04:00/2014-03-09T11:43:00-04:00"
+     "interval": "2008-07-01T11:00:00Z/2008-07-02T11:00:00Z"
     }
    ], 
-   "maximumClockAngle": 5.497787143782138, 
-   "intersectionColor": {
+   "text": "N178CT", 
+   "outlineWidth": 2, 
+   "font": "bold 21pt Lucida Console", 
+   "verticalOrigin": "CENTER", 
+   "outlineColor": {
     "rgba": [
      0, 
-     255, 
-     255, 
+     0, 
+     0, 
      255
     ]
-   }, 
-   "silhouetteMaterial": {
-    "solidColor": {
-     "color": {
-      "rgba": [
-       0, 
-       255, 
-       255, 
-       102
-      ]
-     }
-    }
-   }, 
-   "innerMaterial": {
-    "solidColor": {
-     "color": {
-      "rgba": [
-       0, 
-       255, 
-       255, 
-       102
-      ]
-     }
-    }
    }
   }, 
   "path": {
@@ -106,6 +72,42 @@
      "interval": "2014-03-09T10:18:33-04:00/2014-03-09T11:43:00-04:00"
     }
    ]
+  }, 
+  "billboard": {
+   "pixelOffset": {
+    "cartesian2": [
+     0, 
+     0
+    ]
+   }, 
+   "scale": 1, 
+   "horizontalOrigin": "CENTER", 
+   "eyeOffset": {
+    "cartesian": [
+     0, 
+     0, 
+     0
+    ]
+   }, 
+   "color": [
+    {
+     "interval": "2014-03-09T10:18:33-04:00/2014-03-09T11:43:00-04:00", 
+     "rgba": [
+      255, 
+      255, 
+      0, 
+      255
+     ]
+    }
+   ], 
+   "image": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAwAAAAMCAYAAABWdVznAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsMAAA7DAcdvqGQAAAA/SURBVChTlctJDgAgCARB//9ptBM0cQGZOmmYbi82+LOGAP7NzaEc4BudAzlAGEUHOcB1y8aQA6xNZYwtqDPrPNWDfZ+6CooAAAAASUVORK5CYIIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==", 
+   "show": [
+    {
+     "boolean": true, 
+     "interval": "2014-03-09T10:18:33-04:00/2014-03-09T11:43:00-04:00"
+    }
+   ], 
+   "verticalOrigin": "CENTER"
   }, 
   "position": {
    "interpolationDegree": 3, 
