@@ -4,6 +4,7 @@ define([
         'Core/formatError',
         'DynamicScene/CzmlDataSource',
         'DynamicScene/GeoJsonDataSource',
+        'Scene/CesiumTerrainProvider',
         'Scene/PerformanceDisplay',
         'Widgets/checkForChromeFrame',
         'Widgets/Viewer/Viewer',
@@ -16,6 +17,7 @@ define([
         formatError,
         CzmlDataSource,
         GeoJsonDataSource,
+	CesiumTerrainProvider,
         PerformanceDisplay,
         checkForChromeFrame,
         Viewer,
@@ -89,7 +91,7 @@ define([
 
         var scene = viewer.scene;
 
-        var terrainProvider = new Cesium.CesiumTerrainProvider({
+        var terrainProvider = new CesiumTerrainProvider({
           url : '//cesiumjs.org/tilesets/terrain/smallterrain'
         });
 
