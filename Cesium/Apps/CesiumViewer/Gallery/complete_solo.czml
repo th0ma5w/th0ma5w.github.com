@@ -110,7 +110,6 @@
    "verticalOrigin": "CENTER"
   }, 
   "position": {
-   "interpolationDegree": 3, 
    "cartographicDegrees": [
     "2014-05-26T18:49:51-04:00", 
     -83.072418, 
@@ -8456,8 +8455,7 @@
     -83.072335, 
     40.074736, 
     253.2
-   ], 
-   "interpolationAlgorithm": "LAGRANGE"
+   ]
   }, 
   "availability": "2014-05-26T18:49:51-04:00/2014-05-26T19:38:17-04:00"
  }
