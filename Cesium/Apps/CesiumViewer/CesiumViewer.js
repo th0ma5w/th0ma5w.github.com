@@ -88,6 +88,13 @@ define([
         });
 
         var scene = viewer.scene;
+
+        var terrainProvider = new Cesium.CesiumTerrainProvider({
+          url : '//cesiumjs.org/tilesets/terrain/smallterrain'
+        });
+
+        scene.terrainProvider = terrainProvider;
+
         var context = scene.context;
         if (endUserOptions.debug) {
             context.setValidateShaderProgram(true);
