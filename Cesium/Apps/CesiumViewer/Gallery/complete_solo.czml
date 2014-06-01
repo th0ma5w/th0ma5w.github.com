@@ -8457,7 +8457,7 @@
     40.074736, 
     253.2
    ], 
-   "interpolationAlgorithm": "HERMITE"
+   "interpolationAlgorithm": "LAGRANGE"
   }, 
   "availability": "2014-05-26T18:49:51-04:00/2014-05-26T19:38:17-04:00"
  }
