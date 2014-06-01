@@ -72,7 +72,7 @@ define([
 
     function startup() {
         var terrainProvider = new CesiumTerrainProvider({
-          url : '//cesiumjs.org/tilesets/terrain/smallterrain',
+          url : '//cesiumjs.org/stk-terrain/tilesets/world/tiles',
 	  credit : 'Terrain data courtesy Analytical Graphics, Inc.'
         });
 
