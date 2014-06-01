@@ -71,7 +71,12 @@ define([
     }
 
     function startup() {
-        var viewer = new Viewer('cesiumContainer');
+        var terrainProvider = new CesiumTerrainProvider({
+          url : '//cesiumjs.org/tilesets/terrain/smallterrain',
+	  credit : 'Terrain data courtesy Analytical Graphics, Inc.'
+        });
+
+        var viewer = new Viewer('cesiumContainer',{terrainProvider : terrainProvider});
         viewer.extend(viewerDragDropMixin);
         viewer.extend(viewerDynamicObjectMixin);
         if (endUserOptions.inspector) {
@@ -90,13 +95,6 @@ define([
         });
 
         var scene = viewer.scene;
-
-        var terrainProvider = new CesiumTerrainProvider({
-          url : '//cesiumjs.org/tilesets/terrain/smallterrain'
-        });
-
-        scene.terrainProvider = terrainProvider;
-
         var context = scene.context;
         if (endUserOptions.debug) {
             context.setValidateShaderProgram(true);
