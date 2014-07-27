@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+ "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+  <meta http-equiv="Content-Style-Type" content="text/css" />
+  <meta name="generator" content="pandoc" />
+  <meta name="author" content="T M Winningham" />
+  <meta name="date" content="2014-07-27" />
+  <title>Software Radio with CTypes</title>
+  <style type="text/css">code{white-space: pre;}</style>
+  <link rel="stylesheet" type="text/css" media="screen, projection, print"
+    href="http://www.w3.org/Talks/Tools/Slidy2/styles/slidy.css" />
+  <link rel="stylesheet" type="text/css" media="screen, projection, print"
+   href="slidy.css" />
+  <script src="http://www.w3.org/Talks/Tools/Slidy2/scripts/slidy.js"
+    charset="utf-8" type="text/javascript"></script>
+</head>
+<body>
+<div class="slide titlepage">
+  <h1 class="title">Software Radio with CTypes</h1>
+  <p class="author">
+T M Winningham
+  </p>
+  <p class="date">July 27, 2014</p>
+</div>
+<div id="in-this-talk" class="slide section level1">
+<h1>In this talk</h1>
+<ul>
+<li>The USB Device &amp; Software Radio</li>
+<li>The Python Library</li>
+<li>Development Process</li>
+<li>Demonstration</li>
+</ul>
+</div>
+<div id="device-what-it-is" class="slide section level1">
+<h1>Device – What it is</h1>
+<p><img src="R820T_sdr_1.jpg" width="50%"></img></p>
+<blockquote>
+<p>“RTL-SDR is a very cheap software defined radio that uses a DVB-T TV tuner dongle based on the RTL2832U chipset.”</p>
+</blockquote>
+<p>rtl-sdr.com</p>
+<p>radiohobbyist.org</p>
+</div>
+<div id="device-definitions" class="slide section level1">
+<h1>Device – Definitions</h1>
+<dl>
+<dt>Software Defined Radio</dt>
+<dd><p>Digital sampling or synthesis of electromagnetic radation using software at a specific center frequency and again 90° out of phase, allowing for variable modes and bandwith</p>
+</dd>
+<dt>Digital Video Broadcasting – Terrestrial (DVB-T)</dt>
+<dd><p>European Standard for broadcast digital terrestrial television</p>
+</dd>
+</dl>
+</div>
+<div id="device-sdr-capability-discovery" class="slide section level1">
+<h1>Device – SDR Capability Discovery</h1>
+<ul>
+<li>Antti Palosaari, Eric Fry, and Osmocom</li>
+<li>LinuxTV IRC and mailing list</li>
+<li>Internet community</li>
+<li>Realtek</li>
+<li>~ $20</li>
+</ul>
+</div>
+<div id="device-uses" class="slide section level1">
+<h1>Device – Uses</h1>
+<ul>
+<li>Radio Reception, Spectrum Analysis</li>
+<li>Broadcast Analog FM Radio &amp; RDS</li>
+<li>Police, Ambulance, Fire, EMS, Taxis</li>
+<li>Aircraft Communication &amp; ADS-B Data</li>
+<li>Amateur Radio, Ambient Signals, Passive Radar</li>
+<li>GPS, NOAA Satellites, &amp; much more…</li>
+</ul>
+</div>
+<div id="device-limitations" class="slide section level1">
+<h1>Device – Limitations</h1>
+<ul>
+<li>Receive Only</li>
+<li>Low dynamic range</li>
+<li>Unstable clock</li>
+<li>Noise</li>
+<li>Quality control issues</li>
+<li>Loss of free time</li>
+</ul>
+</div>
+<div id="device-software-gqrx" class="slide section level1">
+<h1>Device – Software – GQRX</h1>
+<p><img width="60%" src="gqrx.jpg"></img></p>
+</div>
+<div id="device-software-librtlsdr" class="slide section level1">
+<h1>Device – Software – librtlsdr</h1>
+<p>Command line tools</p>
+<dl>
+<dt>rtl_sdr, rtl_test, rtl_tcp</dt>
+<dd><p>Raw data, device testing, network sharing</p>
+</dd>
+<dt>rtl_fm, rtl_power, rtl_adsb</dt>
+<dd><p>Audio or digital signals, spectrum scanning, aircraft tracking</p>
+</dd>
+</dl>
+</div>
+<div id="device-find-out-more" class="slide section level1">
+<h1>Device – Find out more</h1>
+<ul>
+<li>Reddit /r/rtlsdr</li>
+<li>Osmocom</li>
+<li>rtl-sdr.com</li>
+<li>NooElec</li>
+<li>Adafruit</li>
+<li>YouTube</li>
+</ul>
+</div>
+<div id="rtl_fm_python-what-it-is" class="slide section level1">
+<h1>RTL_FM_PYTHON – What it is</h1>
+<p><img src="rtlfmpython.gif"></img></p>
+<ul>
+<li>Rapid prototype</li>
+<li>Based on rtl_fm.c</li>
+<li>CTypes</li>
+<li>Flask, React</li>
+<li>High level extensibility</li>
+<li>Stop gap</li>
+</ul>
+</div>
+<div id="rtl_fm_python-python-precedents" class="slide section level1">
+<h1>RTL_FM_PYTHON – Python Precedents</h1>
+<p><img src="grc.png" width="50%"></img></p>
+<ul>
+<li>GNU Radio Companion</li>
+<li>python-librtlsdr</li>
+<li>pyrtlsdr</li>
+<li>rtlsdr-waterfall</li>
+<li>ShinySDR</li>
+</ul>
+</div>
+<div id="process-niche" class="slide section level1">
+<h1>Process – Niche</h1>
+<ul>
+<li>No GNU Radio requirement</li>
+<li>Lightweight</li>
+<li>Remote control</li>
+<li>Unix paradigm, composable like rtl_fm</li>
+<li>Signal demodulation</li>
+</ul>
+</div>
+<div id="process-target-program" class="slide section level1">
+<h1>Process – Target Program</h1>
+<p>RTL_FM</p>
+<ul>
+<li>Command line utility</li>
+<li>Flexible uses
+<ul>
+<li>Audio</li>
+<li>Digital signals</li>
+</ul></li>
+</ul>
+</div>
+<div id="process-target-program-example" class="slide section level1">
+<h1>Process – Target Program Example</h1>
+<pre><code>rtl_fm -M wbfm -f 101.1M - |aplay -r 32000 -f S16_LE -t raw -c 1 </code></pre>
+<ul>
+<li>wide band FM demodulation</li>
+<li>101.1 WOSU Classical 101</li>
+<li>Pipe to stdout</li>
+<li>Play at 32khz, 16-bit, mono</li>
+</ul>
+</div>
+<div id="process-reading-rtl_fm.c" class="slide section level1">
+<h1>Process – Reading rtl_fm.c</h1>
+<ul>
+<li>Straightforward reading</li>
+<li>C is (usually, generally) simpler than C++</li>
+<li>Small blocks, descriptive function names</li>
+<li>Seemed doable</li>
+</ul>
+</div>
+<div id="process-reading-rtl_fm.c-1" class="slide section level1">
+<h1>Process – Reading rtl_fm.c</h1>
+<pre><code>void usb_demod(struct demod_state *fm)
+{
+    int i, pcm;
+    int16_t *lp = fm-&gt;lowpassed;
+    int16_t *r  = fm-&gt;result;
+    for (i = 0; i &lt; fm-&gt;lp_len; i += 2) {
+        pcm = lp[i] + lp[i+1];
+        r[i/2] = (int16_t)pcm * fm-&gt;output_scale;
+    }
+    fm-&gt;result_len = fm-&gt;lp_len/2;
+}</code></pre>
+</div>
+<div id="process-re-arranging" class="slide section level1">
+<h1>Process – Re-arranging</h1>
+<pre><code>some_type some_function (some_type some_parameter) {
+   do_a_bunch_of_stuff(some_parameter);
+   do_more_stuff();
+   do_stuff_i_dont_understand();
+   finish_up();
+}</code></pre>
+<p>to:</p>
+<pre><code>some_type some_new_function(){
+   do_more_stuff();
+}</code></pre>
+</div>
+<div id="process-compilation" class="slide section level1">
+<h1>Process – Compilation</h1>
+<pre><code>gcc -I /usr/include/libusb-1.0 
+    -I ./convenience/ 
+    -I ./getopt 
+    -shared 
+    -Wl,-soname,rtl_fm_python 
+    -o rtl_fm_python.so 
+    -fPIC 
+    rtl_fm_python.c 
+    convenience/convenience.c getopt/getopt.c 
+    -lrtlsdr</code></pre>
+</div>
+<div id="process-iteration" class="slide section level1">
+<h1>Process – Iteration</h1>
+<p><img src="iteration.png"></img></p>
+</div>
+<div id="process-composing-simple-blocks" class="slide section level1">
+<h1>Process – Composing Simple Blocks</h1>
+<pre><code>uint32_t lib_get_frequency(){
+    return controller.freqs[controller.freq_now];
+}</code></pre>
+<ul>
+<li>Inspecting / setting strong C types</li>
+<li>Thread Safe? Who knows!</li>
+<li>Global scope</li>
+<li>Google</li>
+</ul>
+</div>
+<div id="process-python-ctypes" class="slide section level1">
+<h1>Process – Python CTypes</h1>
+<pre><code>fm  = ctypes.CDLL(&#39;./rtl_fm_python.so&#39;)
+get_s_level     = fm.lib_get_s_level
+get_frequency   = fm.lib_get_frequency
+set_demod_fm    = fm.lib_set_demod_fm
+set_demod_wbfm  = fm.lib_set_demod_wbfm
+set_demod_am    = fm.lib_set_demod_am
+set_demod_lsb   = fm.lib_set_demod_lsb
+set_demod_usb   = fm.lib_set_demod_usb
+set_demod_raw   = fm.lib_set_demod_raw
+set_frequency   = lambda f : fm.lib_set_frequency(ctypes.c_uint32(f))
+set_squelch     = lambda l : fm.lib_set_squelch_level(ctypes.c_int(l))
+get_demod       = lambda   : chr(fm.lib_get_demod_mode())
+str_to_freq     = fm.lib_frequency_convert</code></pre>
+</div>
+<div id="process-achievements" class="slide section level1">
+<h1>Process – Achievements</h1>
+<ul>
+<li>Wraps rtl_fm</li>
+<li>Drop-in replacement</li>
+<li>Inspect the running state</li>
+<li>Change frequency, mode, gain</li>
+<li>REST interface, GUI</li>
+<li>Scripting</li>
+</ul>
+</div>
+<div id="process-future" class="slide section level1">
+<h1>Process – Future</h1>
+<ul>
+<li>Other RTL-SDR programs</li>
+<li>Scanning</li>
+<li>More examples of composing, audio streaming</li>
+<li>Other people’s projects</li>
+<li>Indiegogo fundraising project</li>
+</ul>
+</div>
+<div id="demo" class="slide section level1">
+<h1>Demo</h1>
+</div>
+</body>
+</html>

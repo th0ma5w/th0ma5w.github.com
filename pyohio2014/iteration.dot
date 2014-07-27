@@ -1,0 +1,11 @@
+digraph g {
+    layout=fdp;
+    sep="+15";
+    color=white;
+    bgcolor=black;
+    splines=curved;
+    node[shape=none,fontname="linux biolinum italic",fontsize=50,color=white,bgcolor=black,fontcolor=white];
+    edge[color=white,bgcolor=black,arrowsize=2];
+    l [label="Load with CTypes"];
+    Read -> Rearrange -> Compile -> l -> Read;
+}
