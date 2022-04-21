@@ -1,42 +1,41 @@
-/*global define*/
-define(['../Core/Enumeration'], function(Enumeration) {
-    "use strict";
+/**
+ * The horizontal location of an origin relative to an object, e.g., a {@link Billboard}
+ * or {@link Label}.  For example, setting the horizontal origin to <code>LEFT</code>
+ * or <code>RIGHT</code> will display a billboard to the left or right (in screen space)
+ * of the anchor position.
+ * <br /><br />
+ * <div align='center'>
+ * <img src='Images/Billboard.setHorizontalOrigin.png' width='648' height='196' /><br />
+ * </div>
+ *
+ * @enum {Number}
+ *
+ * @see Billboard#horizontalOrigin
+ * @see Label#horizontalOrigin
+ */
+const HorizontalOrigin = {
+  /**
+   * The origin is at the horizontal center of the object.
+   *
+   * @type {Number}
+   * @constant
+   */
+  CENTER: 0,
 
-    /**
-     * The horizontal location of an origin relative to an object, e.g., a {@link Billboard}.
-     * For example, the horizontal origin is used to display a billboard to the left or right (in
-     * screen space) of the actual position.
-     *
-     * @exports HorizontalOrigin
-     *
-     * @see Billboard#setHorizontalOrigin
-     */
-    var HorizontalOrigin = {
-        /**
-         * The origin is at the horizontal center of the object.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0
-         */
-        CENTER : new Enumeration(0, 'CENTER'),
-        /**
-         * The origin is on the left side of the object.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 1
-         */
-        LEFT : new Enumeration(1, 'LEFT'),
-        /**
-         * The origin is on the right side of the object.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default -1
-         */
-        RIGHT : new Enumeration(-1, 'RIGHT')
-    };
+  /**
+   * The origin is on the left side of the object.
+   *
+   * @type {Number}
+   * @constant
+   */
+  LEFT: 1,
 
-    return HorizontalOrigin;
-});
+  /**
+   * The origin is on the right side of the object.
+   *
+   * @type {Number}
+   * @constant
+   */
+  RIGHT: -1,
+};
+export default Object.freeze(HorizontalOrigin);

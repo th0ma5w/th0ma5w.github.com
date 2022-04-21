@@ -1,29 +1,27 @@
-/*global defineSuite*/
-defineSuite(['Core/createGuid'], function(createGuid) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { createGuid } from "../../Source/Cesium.js";
 
-    it('creates GUIDs', function() {
-        var isGuidRegex = /^(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}$/;
+describe("Core/createGuid", function () {
+  it("creates GUIDs", function () {
+    const isGuidRegex = /^(\{){0,1}[0-9a-fA-F]{8}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{4}\-[0-9a-fA-F]{12}(\}){0,1}$/;
 
-        //Create three GUIDs
-        var guid1 = createGuid();
-        var guid2 = createGuid();
-        var guid3 = createGuid();
+    //Create three GUIDs
+    const guid1 = createGuid();
+    const guid2 = createGuid();
+    const guid3 = createGuid();
 
-        //Make sure they are all unique
-        expect(guid1).toNotEqual(guid2);
-        expect(guid1).toNotEqual(guid3);
-        expect(guid2).toNotEqual(guid3);
+    //Make sure they are all unique
+    expect(guid1).not.toEqual(guid2);
+    expect(guid1).not.toEqual(guid3);
+    expect(guid2).not.toEqual(guid3);
 
-        //Make sure they are all properly formatted
-        expect(isGuidRegex.test(guid1)).toEqual(true);
-        expect(guid1.length).toEqual(36);
+    //Make sure they are all properly formatted
+    expect(isGuidRegex.test(guid1)).toEqual(true);
+    expect(guid1.length).toEqual(36);
 
-        expect(isGuidRegex.test(guid2)).toEqual(true);
-        expect(guid2.length).toEqual(36);
+    expect(isGuidRegex.test(guid2)).toEqual(true);
+    expect(guid2.length).toEqual(36);
 
-        expect(isGuidRegex.test(guid3)).toEqual(true);
-        expect(guid3.length).toEqual(36);
-    });
+    expect(isGuidRegex.test(guid3)).toEqual(true);
+    expect(guid3.length).toEqual(36);
+  });
 });

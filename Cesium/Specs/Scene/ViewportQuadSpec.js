@@ -1,138 +1,124 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/ViewportQuad',
-         'Specs/createContext',
-         'Specs/destroyContext',
-         'Specs/createCamera',
-         'Specs/createFrameState',
-         'Specs/frameState',
-         'Specs/render',
-         'Core/BoundingRectangle',
-         'Core/Color',
-         'Renderer/ClearCommand',
-         'Scene/Material'
-     ], function(
-         ViewportQuad,
-         createContext,
-         destroyContext,
-         createCamera,
-         createFrameState,
-         frameState,
-         render,
-         BoundingRectangle,
-         Color,
-         ClearCommand,
-         Material) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { BoundingRectangle } from "../../Source/Cesium.js";
+import { Color } from "../../Source/Cesium.js";
+import { Resource } from "../../Source/Cesium.js";
+import { Texture } from "../../Source/Cesium.js";
+import { Material } from "../../Source/Cesium.js";
+import { ViewportQuad } from "../../Source/Cesium.js";
+import createScene from "../createScene.js";
 
-    var context;
-    var viewportQuad;
-    var us;
-    var testImage;
+describe(
+  "Scene/ViewportQuad",
+  function () {
+    let scene;
+    let viewportQuad;
+    let testImage;
 
-    beforeAll(function() {
-        context = createContext();
-        testImage = new Image();
-        testImage.src = './Data/Images/Red16x16.png';
-
+    beforeAll(function () {
+      scene = createScene();
+      return Resource.fetchImage("./Data/Images/Red16x16.png").then(function (
+        image
+      ) {
+        testImage = image;
+      });
     });
 
-    afterAll(function() {
-        destroyContext(context);
+    afterAll(function () {
+      scene.destroyForSpecs();
     });
 
-    beforeEach(function() {
-        viewportQuad = new ViewportQuad();
-        viewportQuad.rectangle = new BoundingRectangle(0, 0, 2, 2);
-
-        us = context.getUniformState();
-        us.update(context, createFrameState(createCamera(context)));
+    beforeEach(function () {
+      viewportQuad = new ViewportQuad();
+      viewportQuad.rectangle = new BoundingRectangle(0, 0, 2, 2);
     });
 
-    afterEach(function() {
-        viewportQuad = viewportQuad && viewportQuad.destroy();
-        us = undefined;
+    afterEach(function () {
+      scene.primitives.removeAll();
     });
 
-    it('constructs with a rectangle', function() {
-        var rectangle = new BoundingRectangle(1.0, 2.0, 3.0, 4.0);
-        var quad = new ViewportQuad(rectangle);
-        expect(quad.rectangle).toEqual(rectangle);
+    it("constructs with a rectangle", function () {
+      const rectangle = new BoundingRectangle(1.0, 2.0, 3.0, 4.0);
+      const quad = new ViewportQuad(rectangle);
+      expect(quad.rectangle).toEqual(rectangle);
     });
 
-    it('constructs with a material', function() {
-        var material = Material.fromType(Material.StripeType);
-        var quad = new ViewportQuad(undefined, material);
-        expect(quad.material.type).toEqual(material.type);
+    it("constructs with a material", function () {
+      const material = Material.fromType(Material.StripeType);
+      const quad = new ViewportQuad(undefined, material);
+      expect(quad.material.type).toEqual(material.type);
     });
 
-    it('gets the default color', function() {
-        expect(viewportQuad.material.uniforms.color).toEqual(
-            new Color(1.0, 1.0, 1.0, 1.0));
+    it("gets the default color", function () {
+      expect(viewportQuad.material.uniforms.color).toEqual(
+        new Color(1.0, 1.0, 1.0, 1.0)
+      );
     });
 
-    it('throws when rendered with without a rectangle', function() {
-        viewportQuad.rectangle = undefined;
+    it("throws when rendered without a rectangle", function () {
+      viewportQuad.rectangle = undefined;
+      scene.primitives.add(viewportQuad);
 
-        expect(function() {
-            render(context, frameState, viewportQuad);
-        }).toThrowDeveloperError();
+      expect(function () {
+        scene.renderForSpecs();
+      }).toThrowDeveloperError();
     });
 
-    it('throws when rendered with without a material', function() {
-        viewportQuad.material = undefined;
+    it("throws when rendered without a material", function () {
+      viewportQuad.material = undefined;
+      scene.primitives.add(viewportQuad);
 
-        expect(function() {
-            render(context, frameState, viewportQuad);
-        }).toThrowDeveloperError();
+      expect(function () {
+        scene.renderForSpecs();
+      }).toThrowDeveloperError();
     });
 
-    it('does not render when show is false', function() {
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
-
-        viewportQuad.show = false;
-        render(context, frameState, viewportQuad);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+    it("does not render when show is false", function () {
+      viewportQuad.show = false;
+      expect(scene).toRender([0, 0, 0, 255]);
+      scene.primitives.add(viewportQuad);
+      expect(scene).toRender([0, 0, 0, 255]);
     });
 
-    it('renders material', function() {
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
-
-        render(context, frameState, viewportQuad);
-        expect(context.readPixels()).not.toEqual([0, 0, 0, 0]);
+    it("renders material", function () {
+      expect(scene).toRender([0, 0, 0, 255]);
+      scene.primitives.add(viewportQuad);
+      expect(scene).notToRender([0, 0, 0, 255]);
     });
 
-    it('renders user created texture', function() {
+    it("renders user created texture", function () {
+      const texture = new Texture({
+        context: scene.context,
+        source: testImage,
+      });
 
-        waitsFor( function() {
-            return testImage.complete;
-        }, 'Load test image for texture test.', 3000);
+      viewportQuad.material = Material.fromType(Material.ImageType);
+      viewportQuad.material.uniforms.image = texture;
 
-        runs( function() {
-            var texture = context.createTexture2D({
-                source : testImage
-            });
-
-            viewportQuad.material = Material.fromType(Material.ImageType);
-            viewportQuad.material.uniforms.image = texture;
-
-            ClearCommand.ALL.execute(context);
-            expect(context.readPixels()).toEqual([0, 0, 0, 0]);
-
-            render(context, frameState, viewportQuad);
-            expect(context.readPixels()).toEqual([255, 0, 0, 255]);
-        });
+      expect(scene).toRender([0, 0, 0, 255]);
+      scene.primitives.add(viewportQuad);
+      expect(scene).toRender([255, 0, 0, 255]);
     });
 
-    it('isDestroyed', function() {
-        var boundRectangle = new BoundingRectangle(0, 0, 10, 10);
-        var vq = new ViewportQuad(boundRectangle);
+    it("updates rectangle", function () {
+      const otherRectangle = new BoundingRectangle(0, 0, 4, 4);
 
-        expect(vq.isDestroyed()).toEqual(false);
-        vq.destroy();
-        expect(vq.isDestroyed()).toEqual(true);
+      scene.primitives.add(viewportQuad);
+      scene.renderForSpecs();
+
+      viewportQuad.rectangle = otherRectangle;
+      scene.renderForSpecs();
+      expect(scene.frameState.commandList[0].renderState.viewport).toEqual(
+        otherRectangle
+      );
     });
-}, 'WebGL');
+
+    it("isDestroyed", function () {
+      const boundRectangle = new BoundingRectangle(0, 0, 10, 10);
+      const vq = new ViewportQuad(boundRectangle);
+
+      expect(vq.isDestroyed()).toEqual(false);
+      vq.destroy();
+      expect(vq.isDestroyed()).toEqual(true);
+    });
+  },
+  "WebGL"
+);

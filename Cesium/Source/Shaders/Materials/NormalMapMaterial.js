@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "uniform sampler2D image;\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "uniform sampler2D image;\n\
 uniform float strength;\n\
 uniform vec2 repeat;\n\
 \n\
@@ -20,5 +17,5 @@ czm_material czm_getMaterial(czm_materialInput materialInput)\n\
     material.normal = normalEC;\n\
     \n\
     return material;\n\
-}";
-});
+}\n\
+";

@@ -1,19 +1,15 @@
-/*global defineSuite*/
-defineSuite([
-         'Core/defined'
-     ], function(
-         defined) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { defined } from "../../Source/Cesium.js";
 
-    var obj = 42;
-    var obj2;
+describe("Core/defined", function () {
+  it("works for defined value", function () {
+    expect(defined(0)).toEqual(true);
+  });
 
-    it('works for defined object', function() {
-        expect(defined(obj)).toEqual(true);
-    });
+  it("works for null value", function () {
+    expect(defined(null)).toEqual(false);
+  });
 
-    it('works for undefined object', function() {
-        expect(defined(obj2)).toEqual(false);
-    });
+  it("works for undefined value", function () {
+    expect(defined(undefined)).toEqual(false);
+  });
 });

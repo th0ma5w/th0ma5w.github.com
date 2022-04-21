@@ -1,17 +1,12 @@
-/*global defineSuite*/
-defineSuite([
-         'Renderer/PassState'
-     ], function(
-         PassState) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { PassState } from "../../Source/Cesium.js";
 
-    it('creates a pass state', function() {
-        var context = {};
-        var passState = new PassState(context);
-        expect(passState.context).toBe(context);
-        expect(passState.framebuffer).not.toBeDefined();
-        expect(passState.blendingEnabled).not.toBeDefined();
-        expect(passState.scissorTest).not.toBeDefined();
-    });
+describe("Renderer/PassState", function () {
+  it("creates a pass state", function () {
+    const context = {};
+    const passState = new PassState(context);
+    expect(passState.context).toBe(context);
+    expect(passState.framebuffer).not.toBeDefined();
+    expect(passState.blendingEnabled).not.toBeDefined();
+    expect(passState.scissorTest).not.toBeDefined();
+  });
 });

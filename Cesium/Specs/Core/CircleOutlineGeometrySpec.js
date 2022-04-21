@@ -1,91 +1,161 @@
-/*global defineSuite*/
-defineSuite([
-         'Core/CircleOutlineGeometry',
-         'Core/Cartographic',
-         'Core/Ellipsoid'
-     ], function(
-         CircleOutlineGeometry,
-         Cartographic,
-         Ellipsoid) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Cartesian3 } from "../../Source/Cesium.js";
+import { CircleOutlineGeometry } from "../../Source/Cesium.js";
+import { Ellipsoid } from "../../Source/Cesium.js";
+import createPackableSpecs from "../createPackableSpecs.js";
 
-    it('throws without a center', function() {
-        expect(function() {
-            return new CircleOutlineGeometry({
-                radius : 1.0
-            });
-        }).toThrowDeveloperError();
+describe("Core/CircleOutlineGeometry", function () {
+  it("throws without a center", function () {
+    expect(function () {
+      return new CircleOutlineGeometry({
+        radius: 1.0,
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("throws without a radius", function () {
+    expect(function () {
+      return new CircleOutlineGeometry({
+        center: Cartesian3.fromDegrees(0, 0),
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("throws with a negative granularity", function () {
+    expect(function () {
+      return new CircleOutlineGeometry({
+        center: Cartesian3.fromDegrees(0, 0),
+        radius: 1.0,
+        granularity: -1.0,
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("computes positions", function () {
+    const m = CircleOutlineGeometry.createGeometry(
+      new CircleOutlineGeometry({
+        ellipsoid: Ellipsoid.WGS84,
+        center: Cartesian3.fromDegrees(0, 0),
+        granularity: 0.1,
+        radius: 1.0,
+      })
+    );
+
+    expect(m.attributes.position.values.length).toEqual(8 * 3);
+    expect(m.indices.length).toEqual(8 * 2);
+    expect(m.boundingSphere.radius).toEqual(1);
+  });
+
+  it("computes positions extruded", function () {
+    const m = CircleOutlineGeometry.createGeometry(
+      new CircleOutlineGeometry({
+        ellipsoid: Ellipsoid.WGS84,
+        center: Cartesian3.fromDegrees(0, 0),
+        granularity: 0.1,
+        radius: 1.0,
+        extrudedHeight: 5,
+      })
+    );
+
+    expect(m.attributes.position.values.length).toEqual(16 * 3); //8 top circle + 8 bottom circle
+    expect(m.indices.length).toEqual(24 * 2); //8 top + 8 bottom + 8 vertical
+  });
+
+  it("computes positions extruded, no lines between top and bottom", function () {
+    const m = CircleOutlineGeometry.createGeometry(
+      new CircleOutlineGeometry({
+        ellipsoid: Ellipsoid.WGS84,
+        center: Cartesian3.fromDegrees(0, 0),
+        granularity: 0.1,
+        radius: 1.0,
+        extrudedHeight: 10000,
+        numberOfVerticalLines: 0,
+      })
+    );
+
+    expect(m.attributes.position.values.length).toEqual(16 * 3);
+    expect(m.indices.length).toEqual(16 * 2);
+  });
+
+  it("undefined is returned if radius is equal to or less than zero", function () {
+    const circleOutline0 = new CircleOutlineGeometry({
+      center: Cartesian3.fromDegrees(-75.59777, 40.03883),
+      radius: 0.0,
+    });
+    const circleOutline1 = new CircleOutlineGeometry({
+      center: Cartesian3.fromDegrees(-75.59777, 40.03883),
+      radius: -10.0,
     });
 
-    it('throws without a radius', function() {
-        expect(function() {
-            return new CircleOutlineGeometry({
-                center : Ellipsoid.WGS84.cartographicToCartesian(new Cartographic())
-            });
-        }).toThrowDeveloperError();
-    });
+    const geometry0 = CircleOutlineGeometry.createGeometry(circleOutline0);
+    const geometry1 = CircleOutlineGeometry.createGeometry(circleOutline1);
 
-    it('throws with a negative radius', function() {
-        expect(function() {
-            return new CircleOutlineGeometry({
-                center : Ellipsoid.WGS84.cartographicToCartesian(new Cartographic()),
-                radius : -1.0
-            });
-        }).toThrowDeveloperError();
-    });
+    expect(geometry0).toBeUndefined();
+    expect(geometry1).toBeUndefined();
+  });
 
-    it('throws with a negative granularity', function() {
-        expect(function() {
-            return new CircleOutlineGeometry({
-                center : Ellipsoid.WGS84.cartographicToCartesian(new Cartographic()),
-                radius : 1.0,
-                granularity : -1.0
-            });
-        }).toThrowDeveloperError();
-    });
+  const center = new Cartesian3(8, 9, 10);
+  const ellipsoid = new Ellipsoid(11, 12, 13);
+  let packableInstance = new CircleOutlineGeometry({
+    ellipsoid: ellipsoid,
+    center: center,
+    granularity: 1,
+    radius: 2,
+    numberOfVerticalLines: 4,
+    height: 5,
+    extrudedHeight: 7,
+  });
+  let packedInstance = [
+    center.x,
+    center.y,
+    center.z,
+    ellipsoid.radii.x,
+    ellipsoid.radii.y,
+    ellipsoid.radii.z,
+    2,
+    2,
+    0,
+    7,
+    1,
+    5,
+    4,
+    -1,
+  ];
+  createPackableSpecs(
+    CircleOutlineGeometry,
+    packableInstance,
+    packedInstance,
+    "extruded"
+  );
 
-    it('computes positions', function() {
-        var ellipsoid = Ellipsoid.WGS84;
-        var m = CircleOutlineGeometry.createGeometry(new CircleOutlineGeometry({
-            ellipsoid : ellipsoid,
-            center : ellipsoid.cartographicToCartesian(new Cartographic()),
-            granularity : 0.75,
-            radius : 1.0
-        }));
-
-        expect(m.attributes.position.values.length).toEqual(3 * 10);
-        expect(m.indices.length).toEqual(2 * 10);
-        expect(m.boundingSphere.radius).toEqual(1);
-    });
-
-    it('computes positions extruded', function() {
-        var ellipsoid = Ellipsoid.WGS84;
-        var m = CircleOutlineGeometry.createGeometry(new CircleOutlineGeometry({
-            ellipsoid : ellipsoid,
-            center : ellipsoid.cartographicToCartesian(new Cartographic()),
-            granularity : 0.75,
-            radius : 1.0,
-            extrudedHeight : 10000
-        }));
-
-        expect(m.attributes.position.values.length).toEqual(2 * 10 * 3);
-        expect(m.indices.length).toEqual(2 * 10 * 2 + (16*2));
-    });
-
-
-    it('computes positions extruded, no lines between top and bottom', function() {
-        var ellipsoid = Ellipsoid.WGS84;
-        var m = CircleOutlineGeometry.createGeometry(new CircleOutlineGeometry({
-            ellipsoid : ellipsoid,
-            center : ellipsoid.cartographicToCartesian(new Cartographic()),
-            granularity : 0.75,
-            radius : 1.0,
-            extrudedHeight : 10000,
-            numberOfVerticalLines : 0
-        }));
-
-        expect(m.attributes.position.values.length).toEqual(2 * 10 * 3);
-        expect(m.indices.length).toEqual(2 * 10 * 2);
-    });
+  //Because extrudedHeight is optional and has to be taken into account when packing, we have a second test without it.
+  packableInstance = new CircleOutlineGeometry({
+    ellipsoid: ellipsoid,
+    center: center,
+    granularity: 1,
+    radius: 2,
+    numberOfVerticalLines: 4,
+    height: 5,
+  });
+  packedInstance = [
+    center.x,
+    center.y,
+    center.z,
+    ellipsoid.radii.x,
+    ellipsoid.radii.y,
+    ellipsoid.radii.z,
+    2,
+    2,
+    0,
+    5,
+    1,
+    5,
+    4,
+    -1,
+  ];
+  createPackableSpecs(
+    CircleOutlineGeometry,
+    packableInstance,
+    packedInstance,
+    "at height"
+  );
 });

@@ -1,56 +1,48 @@
-/*global defineSuite*/
-defineSuite([
-         'Widgets/SelectionIndicator/SelectionIndicator',
-         'Core/Ellipsoid',
-         'Scene/SceneTransitioner',
-         'Specs/createScene',
-         'Specs/destroyScene'
-     ], function(
-         SelectionIndicator,
-         Ellipsoid,
-         SceneTransitioner,
-         createScene,
-         destroyScene) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import createScene from "../../createScene.js";
+import { SelectionIndicator } from "../../../Source/Cesium.js";
 
-    var scene;
-    beforeAll(function() {
-        scene = createScene();
+describe(
+  "Widgets/SelectionIndicator/SelectionIndicator",
+  function () {
+    let scene;
+    beforeAll(function () {
+      scene = createScene();
     });
 
-    afterAll(function() {
-        destroyScene(scene);
+    afterAll(function () {
+      scene.destroyForSpecs();
     });
 
-    it('constructor sets expected values', function() {
-        var selectionIndicator = new SelectionIndicator(document.body, scene);
-        expect(selectionIndicator.container).toBe(document.body);
-        expect(selectionIndicator.viewModel.scene).toBe(scene);
-        expect(selectionIndicator.isDestroyed()).toEqual(false);
-        selectionIndicator.destroy();
-        expect(selectionIndicator.isDestroyed()).toEqual(true);
+    it("constructor sets expected values", function () {
+      const selectionIndicator = new SelectionIndicator(document.body, scene);
+      expect(selectionIndicator.container).toBe(document.body);
+      expect(selectionIndicator.viewModel.scene).toBe(scene);
+      expect(selectionIndicator.isDestroyed()).toEqual(false);
+      selectionIndicator.destroy();
+      expect(selectionIndicator.isDestroyed()).toEqual(true);
     });
 
-    it('constructor works with string id container', function() {
-        var testElement = document.createElement('span');
-        testElement.id = 'testElement';
-        document.body.appendChild(testElement);
-        var selectionIndicator = new SelectionIndicator('testElement', scene);
-        expect(selectionIndicator.container).toBe(testElement);
-        document.body.removeChild(testElement);
-        selectionIndicator.destroy();
+    it("constructor works with string id container", function () {
+      const testElement = document.createElement("span");
+      testElement.id = "testElement";
+      document.body.appendChild(testElement);
+      const selectionIndicator = new SelectionIndicator("testElement", scene);
+      expect(selectionIndicator.container).toBe(testElement);
+      document.body.removeChild(testElement);
+      selectionIndicator.destroy();
     });
 
-    it('throws if container is undefined', function() {
-        expect(function() {
-            return new SelectionIndicator(undefined, scene);
-        }).toThrowDeveloperError();
+    it("throws if container is undefined", function () {
+      expect(function () {
+        return new SelectionIndicator(undefined, scene);
+      }).toThrowDeveloperError();
     });
 
-    it('throws if container string is undefined', function() {
-        expect(function() {
-            return new SelectionIndicator('testElement', scene);
-        }).toThrowDeveloperError();
+    it("throws if container string is undefined", function () {
+      expect(function () {
+        return new SelectionIndicator("testElement", scene);
+      }).toThrowDeveloperError();
     });
-}, 'WebGL');
+  },
+  "WebGL"
+);

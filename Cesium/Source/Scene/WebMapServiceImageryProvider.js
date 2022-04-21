@@ -1,423 +1,770 @@
-/*global define*/
-define([
-        '../Core/clone',
-        '../Core/defaultValue',
-        '../Core/defined',
-        '../Core/defineProperties',
-        '../Core/freezeObject',
-        '../Core/DeveloperError',
-        '../Core/Event',
-        '../Core/Extent',
-        './Credit',
-        './ImageryProvider',
-        './GeographicTilingScheme'
-    ], function(
-        clone,
-        defaultValue,
-        defined,
-        defineProperties,
-        freezeObject,
-        DeveloperError,
-        Event,
-        Extent,
-        Credit,
-        ImageryProvider,
-        GeographicTilingScheme) {
-    "use strict";
+import defaultValue from "../Core/defaultValue.js";
+import defined from "../Core/defined.js";
+import DeveloperError from "../Core/DeveloperError.js";
+import GeographicTilingScheme from "../Core/GeographicTilingScheme.js";
+import Resource from "../Core/Resource.js";
+import WebMercatorProjection from "../Core/WebMercatorProjection.js";
+import GetFeatureInfoFormat from "./GetFeatureInfoFormat.js";
+import TimeDynamicImagery from "./TimeDynamicImagery.js";
+import UrlTemplateImageryProvider from "./UrlTemplateImageryProvider.js";
 
-    /**
-     * Provides tiled imagery hosted by a Web Map Service (WMS) server.
-     *
-     * @alias WebMapServiceImageryProvider
-     * @constructor
-     *
-     * @param {String} description.url The URL of the WMS service.
-     * @param {String} description.layers The layers to include, separated by commas.
-     * @param {Object} [description.parameters=WebMapServiceImageryProvider.DefaultParameters] Additional parameters to pass to the WMS server in the GetMap URL.
-     * @param {Extent} [description.extent=Extent.MAX_VALUE] The extent of the layer.
-     * @param {Number} [description.maximumLevel] The maximum level-of-detail supported by the imagery provider.
-     *        If not specified, there is no limit.
-     * @param {Credit|String} [description.credit] A credit for the data source, which is displayed on the canvas.
-     * @param {Object} [description.proxy] A proxy to use for requests. This object is
-     *        expected to have a getURL function which returns the proxied URL, if needed.
-     *
-     * @see ArcGisMapServerImageryProvider
-     * @see BingMapsImageryProvider
-     * @see GoogleEarthImageryProvider
-     * @see SingleTileImageryProvider
-     * @see TileMapServiceImageryProvider
-     * @see OpenStreetMapImageryProvider
-     *
-     * @see <a href='http://resources.esri.com/help/9.3/arcgisserver/apis/rest/'>ArcGIS Server REST API</a>
-     * @see <a href='http://www.w3.org/TR/cors/'>Cross-Origin Resource Sharing</a>
-     *
-     * @example
-     * var provider = new Cesium.WebMapServiceImageryProvider({
-     *     url: 'http://sampleserver1.arcgisonline.com/ArcGIS/services/Specialty/ESRI_StatesCitiesRivers_USA/MapServer/WMSServer',
-     *     layers : '0',
-     *     proxy: new Cesium.DefaultProxy('/proxy/')
-     * });
-     */
-    var WebMapServiceImageryProvider = function WebMapServiceImageryProvider(description) {
-        description = defaultValue(description, {});
+/**
+ * EPSG codes known to include reverse axis orders, but are not within 4000-5000.
+ *
+ * @type {number[]}
+ */
+const includesReverseAxis = [
+  3034, // ETRS89-extended / LCC Europe
+  3035, // ETRS89-extended / LAEA Europe
+  3042, // ETRS89 / UTM zone 30N (N-E)
+  3043, // ETRS89 / UTM zone 31N (N-E)
+  3044, // ETRS89 / UTM zone 32N (N-E)
+];
 
-        //>>includeStart('debug', pragmas.debug);
-        if (!defined(description.url)) {
-            throw new DeveloperError('description.url is required.');
+/**
+ * EPSG codes known to not include reverse axis orders, and are within 4000-5000.
+ *
+ * @type {number[]}
+ */
+const excludesReverseAxis = [
+  4471, // Mayotte
+  4559, // French Antilles
+];
+
+/**
+ * @typedef {Object} WebMapServiceImageryProvider.ConstructorOptions
+ *
+ * Initialization options for the WebMapServiceImageryProvider constructor
+ *
+ * @property {Resource|String} url The URL of the WMS service. The URL supports the same keywords as the {@link UrlTemplateImageryProvider}.
+ * @property {String} layers The layers to include, separated by commas.
+ * @property {Object} [parameters=WebMapServiceImageryProvider.DefaultParameters] Additional parameters to pass to the WMS server in the GetMap URL.
+ * @property {Object} [getFeatureInfoParameters=WebMapServiceImageryProvider.GetFeatureInfoDefaultParameters] Additional parameters to pass to the WMS server in the GetFeatureInfo URL.
+ * @property {Boolean} [enablePickFeatures=true] If true, {@link WebMapServiceImageryProvider#pickFeatures} will invoke
+ *        the GetFeatureInfo operation on the WMS server and return the features included in the response.  If false,
+ *        {@link WebMapServiceImageryProvider#pickFeatures} will immediately return undefined (indicating no pickable features)
+ *        without communicating with the server.  Set this property to false if you know your WMS server does not support
+ *        GetFeatureInfo or if you don't want this provider's features to be pickable. Note that this can be dynamically
+ *        overridden by modifying the WebMapServiceImageryProvider#enablePickFeatures property.
+ * @property {GetFeatureInfoFormat[]} [getFeatureInfoFormats=WebMapServiceImageryProvider.DefaultGetFeatureInfoFormats] The formats
+ *        in which to try WMS GetFeatureInfo requests.
+ * @property {Rectangle} [rectangle=Rectangle.MAX_VALUE] The rectangle of the layer.
+ * @property {TilingScheme} [tilingScheme=new GeographicTilingScheme()] The tiling scheme to use to divide the world into tiles.
+ * @property {Ellipsoid} [ellipsoid] The ellipsoid.  If the tilingScheme is specified,
+ *        this parameter is ignored and the tiling scheme's ellipsoid is used instead. If neither
+ *        parameter is specified, the WGS84 ellipsoid is used.
+ * @property {Number} [tileWidth=256] The width of each tile in pixels.
+ * @property {Number} [tileHeight=256] The height of each tile in pixels.
+ * @property {Number} [minimumLevel=0] The minimum level-of-detail supported by the imagery provider.  Take care when
+ *        specifying this that the number of tiles at the minimum level is small, such as four or less.  A larger number is
+ *        likely to result in rendering problems.
+ * @property {Number} [maximumLevel] The maximum level-of-detail supported by the imagery provider, or undefined if there is no limit.
+ *        If not specified, there is no limit.
+ * @property {String} [crs] CRS specification, for use with WMS specification >= 1.3.0.
+ * @property {String} [srs] SRS specification, for use with WMS specification 1.1.0 or 1.1.1
+ * @property {Credit|String} [credit] A credit for the data source, which is displayed on the canvas.
+ * @property {String|String[]} [subdomains='abc'] The subdomains to use for the <code>{s}</code> placeholder in the URL template.
+ *                          If this parameter is a single string, each character in the string is a subdomain.  If it is
+ *                          an array, each element in the array is a subdomain.
+ * @property {Clock} [clock] A Clock instance that is used when determining the value for the time dimension. Required when `times` is specified.
+ * @property {TimeIntervalCollection} [times] TimeIntervalCollection with its data property being an object containing time dynamic dimension and their values.
+ * @property {Resource|String} [getFeatureInfoUrl] The getFeatureInfo URL of the WMS service. If the property is not defined then we use the property value of url.
+ */
+
+/**
+ * Provides tiled imagery hosted by a Web Map Service (WMS) server.
+ *
+ * @alias WebMapServiceImageryProvider
+ * @constructor
+ *
+ * @param {WebMapServiceImageryProvider.ConstructorOptions} options Object describing initialization options
+ *
+ * @see ArcGisMapServerImageryProvider
+ * @see BingMapsImageryProvider
+ * @see GoogleEarthEnterpriseMapsProvider
+ * @see OpenStreetMapImageryProvider
+ * @see SingleTileImageryProvider
+ * @see TileMapServiceImageryProvider
+ * @see WebMapTileServiceImageryProvider
+ * @see UrlTemplateImageryProvider
+ *
+ * @see {@link http://resources.esri.com/help/9.3/arcgisserver/apis/rest/|ArcGIS Server REST API}
+ * @see {@link http://www.w3.org/TR/cors/|Cross-Origin Resource Sharing}
+ *
+ * @example
+ * const provider = new Cesium.WebMapServiceImageryProvider({
+ *     url : 'https://sampleserver1.arcgisonline.com/ArcGIS/services/Specialty/ESRI_StatesCitiesRivers_USA/MapServer/WMSServer',
+ *     layers : '0',
+ *     proxy: new Cesium.DefaultProxy('/proxy/')
+ * });
+ *
+ * viewer.imageryLayers.addImageryProvider(provider);
+ */
+function WebMapServiceImageryProvider(options) {
+  options = defaultValue(options, defaultValue.EMPTY_OBJECT);
+
+  //>>includeStart('debug', pragmas.debug);
+  if (!defined(options.url)) {
+    throw new DeveloperError("options.url is required.");
+  }
+  if (!defined(options.layers)) {
+    throw new DeveloperError("options.layers is required.");
+  }
+  //>>includeEnd('debug');
+
+  if (defined(options.times) && !defined(options.clock)) {
+    throw new DeveloperError(
+      "options.times was specified, so options.clock is required."
+    );
+  }
+
+  /**
+   * The default alpha blending value of this provider, with 0.0 representing fully transparent and
+   * 1.0 representing fully opaque.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultAlpha = undefined;
+
+  /**
+   * The default alpha blending value on the night side of the globe of this provider, with 0.0 representing fully transparent and
+   * 1.0 representing fully opaque.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultNightAlpha = undefined;
+
+  /**
+   * The default alpha blending value on the day side of the globe of this provider, with 0.0 representing fully transparent and
+   * 1.0 representing fully opaque.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultDayAlpha = undefined;
+
+  /**
+   * The default brightness of this provider.  1.0 uses the unmodified imagery color.  Less than 1.0
+   * makes the imagery darker while greater than 1.0 makes it brighter.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultBrightness = undefined;
+
+  /**
+   * The default contrast of this provider.  1.0 uses the unmodified imagery color.  Less than 1.0 reduces
+   * the contrast while greater than 1.0 increases it.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultContrast = undefined;
+
+  /**
+   * The default hue of this provider in radians. 0.0 uses the unmodified imagery color.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultHue = undefined;
+
+  /**
+   * The default saturation of this provider. 1.0 uses the unmodified imagery color. Less than 1.0 reduces the
+   * saturation while greater than 1.0 increases it.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultSaturation = undefined;
+
+  /**
+   * The default gamma correction to apply to this provider.  1.0 uses the unmodified imagery color.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.defaultGamma = undefined;
+
+  /**
+   * The default texture minification filter to apply to this provider.
+   *
+   * @type {TextureMinificationFilter}
+   * @default undefined
+   */
+  this.defaultMinificationFilter = undefined;
+
+  /**
+   * The default texture magnification filter to apply to this provider.
+   *
+   * @type {TextureMagnificationFilter}
+   * @default undefined
+   */
+  this.defaultMagnificationFilter = undefined;
+
+  this._getFeatureInfoUrl = defaultValue(
+    options.getFeatureInfoUrl,
+    options.url
+  );
+
+  const resource = Resource.createIfNeeded(options.url);
+  const pickFeatureResource = Resource.createIfNeeded(this._getFeatureInfoUrl);
+
+  resource.setQueryParameters(
+    WebMapServiceImageryProvider.DefaultParameters,
+    true
+  );
+  pickFeatureResource.setQueryParameters(
+    WebMapServiceImageryProvider.GetFeatureInfoDefaultParameters,
+    true
+  );
+
+  if (defined(options.parameters)) {
+    resource.setQueryParameters(objectToLowercase(options.parameters));
+  }
+
+  if (defined(options.getFeatureInfoParameters)) {
+    pickFeatureResource.setQueryParameters(
+      objectToLowercase(options.getFeatureInfoParameters)
+    );
+  }
+
+  const that = this;
+  this._reload = undefined;
+  if (defined(options.times)) {
+    this._timeDynamicImagery = new TimeDynamicImagery({
+      clock: options.clock,
+      times: options.times,
+      requestImageFunction: function (x, y, level, request, interval) {
+        return requestImage(that, x, y, level, request, interval);
+      },
+      reloadFunction: function () {
+        if (defined(that._reload)) {
+          that._reload();
         }
-        if (!defined(description.layers)) {
-            throw new DeveloperError('description.layers is required.');
-        }
-        //>>includeEnd('debug');
+      },
+    });
+  }
 
-        this._url = description.url;
-        this._tileDiscardPolicy = description.tileDiscardPolicy;
-        this._proxy = description.proxy;
-        this._layers = description.layers;
+  const parameters = {};
+  parameters.layers = options.layers;
+  parameters.bbox =
+    "{westProjected},{southProjected},{eastProjected},{northProjected}";
+  parameters.width = "{width}";
+  parameters.height = "{height}";
 
-        // Merge the parameters with the defaults, and make all parameter names lowercase
-        var parameters = clone(WebMapServiceImageryProvider.DefaultParameters);
-        if (defined(description.parameters)) {
-            for (var parameter in description.parameters) {
-                if (description.parameters.hasOwnProperty(parameter)) {
-                    var parameterLowerCase = parameter.toLowerCase();
-                    parameters[parameterLowerCase] = description.parameters[parameter];
-                }
-            }
-        }
+  // Use SRS or CRS based on the WMS version.
+  if (parseFloat(resource.queryParameters.version) >= 1.3) {
+    // Use CRS with 1.3.0 and going forward.
+    // For GeographicTilingScheme, use CRS:84 vice EPSG:4326 to specify lon, lat (x, y) ordering for
+    // bbox requests.
+    parameters.crs = defaultValue(
+      options.crs,
+      options.tilingScheme &&
+        options.tilingScheme.projection instanceof WebMercatorProjection
+        ? "EPSG:3857"
+        : "CRS:84"
+    );
 
-        this._parameters = parameters;
-
-        this._tileWidth = 256;
-        this._tileHeight = 256;
-        this._maximumLevel = description.maximumLevel; // undefined means no limit
-
-        var extent = defaultValue(description.extent, Extent.MAX_VALUE);
-        this._tilingScheme = new GeographicTilingScheme({
-            extent : extent
-        });
-
-        var credit = description.credit;
-        if (typeof credit === 'string') {
-            credit = new Credit(credit);
-        }
-        this._credit = credit;
-
-        this._errorEvent = new Event();
-
-        this._ready = true;
-    };
-
-    function buildImageUrl(imageryProvider, x, y, level) {
-        var url = imageryProvider._url;
-        var indexOfQuestionMark = url.indexOf('?');
-        if (indexOfQuestionMark >= 0 && indexOfQuestionMark < url.length - 1) {
-            if (url[url.length - 1] !== '&') {
-                url += '&';
-            }
-        } else if (indexOfQuestionMark < 0) {
-            url += '?';
-        }
-
-        var parameters = imageryProvider._parameters;
-        for (var parameter in parameters) {
-            if (parameters.hasOwnProperty(parameter)) {
-                url += parameter + '=' + parameters[parameter] + '&';
-            }
-        }
-
-        if (!defined(parameters.layers)) {
-            url += 'layers=' + imageryProvider._layers + '&';
-        }
-
-        if (!defined(parameters.srs)) {
-            url += 'srs=EPSG:4326&';
-        }
-
-        if (!defined(parameters.bbox)) {
-            var nativeExtent = imageryProvider._tilingScheme.tileXYToNativeExtent(x, y, level);
-            var bbox = nativeExtent.west + ',' + nativeExtent.south + ',' + nativeExtent.east + ',' + nativeExtent.north;
-            url += 'bbox=' + bbox + '&';
-        }
-
-        if (!defined(parameters.width)) {
-            url += 'width=256&';
-        }
-
-        if (!defined(parameters.height)) {
-            url += 'height=256&';
-        }
-
-        var proxy = imageryProvider._proxy;
-        if (defined(proxy)) {
-            url = proxy.getURL(url);
-        }
-
-        return url;
+    // The axis order in previous versions of the WMS specifications was to always use easting (x or lon ) and northing (y or
+    // lat). WMS 1.3.0 specifies that, depending on the particular CRS, the x axis may or may not be oriented West-to-East,
+    // and the y axis may or may not be oriented South-to-North. The WMS portrayal operation shall account for axis order.
+    // This affects some of the EPSG codes that were commonly used such as ESPG:4326. The current implementation
+    // makes sure that coordinates passed to the server (as part of the GetMap BBOX parameter) as well as those advertised
+    // in the capabilities document reflect the inverse axe orders for EPSG codes between 4000 and 5000.
+    //  - Taken from Section 9.1.3 of https://download.osgeo.org/mapserver/docs/MapServer-56.pdf
+    const parts = parameters.crs.split(":");
+    if (parts[0] === "EPSG" && parts.length === 2) {
+      const code = Number(parts[1]);
+      if (
+        (code >= 4000 && code < 5000 && !excludesReverseAxis.includes(code)) ||
+        includesReverseAxis.includes(code)
+      ) {
+        parameters.bbox =
+          "{southProjected},{westProjected},{northProjected},{eastProjected}";
+      }
     }
+  } else {
+    // SRS for WMS 1.1.0 or 1.1.1.
+    parameters.srs = defaultValue(
+      options.srs,
+      options.tilingScheme &&
+        options.tilingScheme.projection instanceof WebMercatorProjection
+        ? "EPSG:3857"
+        : "EPSG:4326"
+    );
+  }
 
+  resource.setQueryParameters(parameters, true);
+  pickFeatureResource.setQueryParameters(parameters, true);
 
-    defineProperties(WebMapServiceImageryProvider.prototype, {
-        /**
-         * Gets the URL of the WMS server.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {String}
-         */
-        url : {
-            get : function() {
-                return this._url;
-            }
-        },
+  const pickFeatureParams = {
+    query_layers: options.layers,
+    info_format: "{format}",
+  };
+  // use correct pixel coordinate identifier based on version
+  if (parseFloat(pickFeatureResource.queryParameters.version) >= 1.3) {
+    pickFeatureParams.i = "{i}";
+    pickFeatureParams.j = "{j}";
+  } else {
+    pickFeatureParams.x = "{i}";
+    pickFeatureParams.y = "{j}";
+  }
+  pickFeatureResource.setQueryParameters(pickFeatureParams, true);
 
-        /**
-         * Gets the proxy used by this provider.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Proxy}
-         */
-        proxy : {
-            get : function() {
-                return this._proxy;
-            }
-        },
+  this._resource = resource;
+  this._pickFeaturesResource = pickFeatureResource;
+  this._layers = options.layers;
 
-        /**
-         * Gets the names of the WMS layers, separated by commas.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @returns {String}
-         */
-        layers : {
-            get : function() {
-                return this._layers;
-            }
-        },
+  // Let UrlTemplateImageryProvider do the actual URL building.
+  this._tileProvider = new UrlTemplateImageryProvider({
+    url: resource,
+    pickFeaturesUrl: pickFeatureResource,
+    tilingScheme: defaultValue(
+      options.tilingScheme,
+      new GeographicTilingScheme({ ellipsoid: options.ellipsoid })
+    ),
+    rectangle: options.rectangle,
+    tileWidth: options.tileWidth,
+    tileHeight: options.tileHeight,
+    minimumLevel: options.minimumLevel,
+    maximumLevel: options.maximumLevel,
+    subdomains: options.subdomains,
+    tileDiscardPolicy: options.tileDiscardPolicy,
+    credit: options.credit,
+    getFeatureInfoFormats: defaultValue(
+      options.getFeatureInfoFormats,
+      WebMapServiceImageryProvider.DefaultGetFeatureInfoFormats
+    ),
+    enablePickFeatures: options.enablePickFeatures,
+  });
+}
 
-        /**
-         * Gets the width of each tile, in pixels. This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProviderr.prototype
-         * @type {Number}
-         */
-        tileWidth : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('tileWidth must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+function requestImage(imageryProvider, col, row, level, request, interval) {
+  const dynamicIntervalData = defined(interval) ? interval.data : undefined;
+  const tileProvider = imageryProvider._tileProvider;
 
-                return this._tileWidth;
-            }
-        },
+  if (defined(dynamicIntervalData)) {
+    // We set the query parameters within the tile provider, because it is managing the query.
+    tileProvider._resource.setQueryParameters(dynamicIntervalData);
+  }
+  return tileProvider.requestImage(col, row, level, request);
+}
 
-        /**
-         * Gets the height of each tile, in pixels.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Number}
-         */
-        tileHeight: {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('tileHeight must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+function pickFeatures(
+  imageryProvider,
+  x,
+  y,
+  level,
+  longitude,
+  latitude,
+  interval
+) {
+  const dynamicIntervalData = defined(interval) ? interval.data : undefined;
+  const tileProvider = imageryProvider._tileProvider;
 
-                return this._tileHeight;
-            }
-        },
+  if (defined(dynamicIntervalData)) {
+    // We set the query parameters within the tile provider, because it is managing the query.
+    tileProvider._pickFeaturesResource.setQueryParameters(dynamicIntervalData);
+  }
+  return tileProvider.pickFeatures(x, y, level, longitude, latitude);
+}
 
-        /**
-         * Gets the maximum level-of-detail that can be requested.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Number}
-         */
-        maximumLevel : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('maximumLevel must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+Object.defineProperties(WebMapServiceImageryProvider.prototype, {
+  /**
+   * Gets the URL of the WMS server.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {String}
+   * @readonly
+   */
+  url: {
+    get: function () {
+      return this._resource._url;
+    },
+  },
 
-                return this._maximumLevel;
-            }
-        },
+  /**
+   * Gets the proxy used by this provider.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Proxy}
+   * @readonly
+   */
+  proxy: {
+    get: function () {
+      return this._resource.proxy;
+    },
+  },
 
-        /**
-         * Gets the minimum level-of-detail that can be requested.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Number}
-         */
-        minimumLevel : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('minimumLevel must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+  /**
+   * Gets the names of the WMS layers, separated by commas.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {String}
+   * @readonly
+   */
+  layers: {
+    get: function () {
+      return this._layers;
+    },
+  },
 
-                return 0;
-            }
-        },
+  /**
+   * Gets the width of each tile, in pixels. This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Number}
+   * @readonly
+   */
+  tileWidth: {
+    get: function () {
+      return this._tileProvider.tileWidth;
+    },
+  },
 
-        /**
-         * Gets the tiling scheme used by this provider.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {TilingScheme}
-         */
-        tilingScheme : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('tilingScheme must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+  /**
+   * Gets the height of each tile, in pixels.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Number}
+   * @readonly
+   */
+  tileHeight: {
+    get: function () {
+      return this._tileProvider.tileHeight;
+    },
+  },
 
-                return this._tilingScheme;
-            }
-        },
+  /**
+   * Gets the maximum level-of-detail that can be requested.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Number|undefined}
+   * @readonly
+   */
+  maximumLevel: {
+    get: function () {
+      return this._tileProvider.maximumLevel;
+    },
+  },
 
-        /**
-         * Gets the extent, in radians, of the imagery provided by this instance.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Extent}
-         */
-        extent : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('extent must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+  /**
+   * Gets the minimum level-of-detail that can be requested.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Number}
+   * @readonly
+   */
+  minimumLevel: {
+    get: function () {
+      return this._tileProvider.minimumLevel;
+    },
+  },
 
-                return this._tilingScheme.extent;
-            }
-        },
+  /**
+   * Gets the tiling scheme used by this provider.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {TilingScheme}
+   * @readonly
+   */
+  tilingScheme: {
+    get: function () {
+      return this._tileProvider.tilingScheme;
+    },
+  },
 
-        /**
-         * Gets the tile discard policy.  If not undefined, the discard policy is responsible
-         * for filtering out "missing" tiles via its shouldDiscardImage function.  If this function
-         * returns undefined, no tiles are filtered.  This function should
-         * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {TileDiscardPolicy}
-         */
-        tileDiscardPolicy : {
-            get : function() {
-                //>>includeStart('debug', pragmas.debug);
-                if (!this._ready) {
-                    throw new DeveloperError('tileDiscardPolicy must not be called before the imagery provider is ready.');
-                }
-                //>>includeEnd('debug');
+  /**
+   * Gets the rectangle, in radians, of the imagery provided by this instance.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Rectangle}
+   * @readonly
+   */
+  rectangle: {
+    get: function () {
+      return this._tileProvider.rectangle;
+    },
+  },
 
-                return this._tileDiscardPolicy;
-            }
-        },
+  /**
+   * Gets the tile discard policy.  If not undefined, the discard policy is responsible
+   * for filtering out "missing" tiles via its shouldDiscardImage function.  If this function
+   * returns undefined, no tiles are filtered.  This function should
+   * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {TileDiscardPolicy}
+   * @readonly
+   */
+  tileDiscardPolicy: {
+    get: function () {
+      return this._tileProvider.tileDiscardPolicy;
+    },
+  },
 
-        /**
-         * Gets an event that is raised when the imagery provider encounters an asynchronous error.  By subscribing
-         * to the event, you will be notified of the error and can potentially recover from it.  Event listeners
-         * are passed an instance of {@link TileProviderError}.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Event}
-         */
-        errorEvent : {
-            get : function() {
-                return this._errorEvent;
-            }
-        },
+  /**
+   * Gets an event that is raised when the imagery provider encounters an asynchronous error.  By subscribing
+   * to the event, you will be notified of the error and can potentially recover from it.  Event listeners
+   * are passed an instance of {@link TileProviderError}.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Event}
+   * @readonly
+   */
+  errorEvent: {
+    get: function () {
+      return this._tileProvider.errorEvent;
+    },
+  },
 
-        /**
-         * Gets a value indicating whether or not the provider is ready for use.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Boolean}
-         */
-        ready : {
-            get : function() {
-                return this._ready;
-            }
-        },
+  /**
+   * Gets a value indicating whether or not the provider is ready for use.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Boolean}
+   * @readonly
+   */
+  ready: {
+    get: function () {
+      return this._tileProvider.ready;
+    },
+  },
 
-        /**
-         * Gets the credit to display when this imagery provider is active.  Typically this is used to credit
-         * the source of the imagery.  This function should not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-         * @memberof WebMapServiceImageryProvider.prototype
-         * @type {Credit}
-         */
-        credit : {
-            get : function() {
-                return this._credit;
-            }
-        }
-    });
+  /**
+   * Gets a promise that resolves to true when the provider is ready for use.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Promise.<Boolean>}
+   * @readonly
+   */
+  readyPromise: {
+    get: function () {
+      return this._tileProvider.readyPromise;
+    },
+  },
 
-    /**
-     * Gets the credits to be displayed when a given tile is displayed.
-     *
-     * @memberof WebMapServiceImageryProvider
-     *
-     * @param {Number} x The tile X coordinate.
-     * @param {Number} y The tile Y coordinate.
-     * @param {Number} level The tile level;
-     *
-     * @returns {Credit[]} The credits to be displayed when the tile is displayed.
-     *
-     * @exception {DeveloperError} <code>getTileCredits</code> must not be called before the imagery provider is ready.
-     */
-    WebMapServiceImageryProvider.prototype.getTileCredits = function(x, y, level) {
-        return undefined;
-    };
+  /**
+   * Gets the credit to display when this imagery provider is active.  Typically this is used to credit
+   * the source of the imagery.  This function should not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Credit}
+   * @readonly
+   */
+  credit: {
+    get: function () {
+      return this._tileProvider.credit;
+    },
+  },
 
-    /**
-     * Requests the image for a given tile.  This function should
-     * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
-     *
-     * @memberof WebMapServiceImageryProvider
-     *
-     * @param {Number} x The tile X coordinate.
-     * @param {Number} y The tile Y coordinate.
-     * @param {Number} level The tile level.
-     *
-     * @returns {Promise} A promise for the image that will resolve when the image is available, or
-     *          undefined if there are too many active requests to the server, and the request
-     *          should be retried later.  The resolved image may be either an
-     *          Image or a Canvas DOM object.
-     *
-     * @exception {DeveloperError} <code>requestImage</code> must not be called before the imagery provider is ready.
-     */
-    WebMapServiceImageryProvider.prototype.requestImage = function(x, y, level) {
-        //>>includeStart('debug', pragmas.debug);
-        if (!this._ready) {
-            throw new DeveloperError('requestImage must not be called before the imagery provider is ready.');
-        }
-        //>>includeEnd('debug');
+  /**
+   * Gets a value indicating whether or not the images provided by this imagery provider
+   * include an alpha channel.  If this property is false, an alpha channel, if present, will
+   * be ignored.  If this property is true, any images without an alpha channel will be treated
+   * as if their alpha is 1.0 everywhere.  When this property is false, memory usage
+   * and texture upload time are reduced.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Boolean}
+   * @readonly
+   */
+  hasAlphaChannel: {
+    get: function () {
+      return this._tileProvider.hasAlphaChannel;
+    },
+  },
 
-        var url = buildImageUrl(this, x, y, level);
-        return ImageryProvider.loadImage(this, url);
-    };
+  /**
+   * Gets or sets a value indicating whether feature picking is enabled.  If true, {@link WebMapServiceImageryProvider#pickFeatures} will
+   * invoke the <code>GetFeatureInfo</code> service on the WMS server and attempt to interpret the features included in the response.  If false,
+   * {@link WebMapServiceImageryProvider#pickFeatures} will immediately return undefined (indicating no pickable
+   * features) without communicating with the server.  Set this property to false if you know your data
+   * source does not support picking features or if you don't want this provider's features to be pickable.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Boolean}
+   * @default true
+   */
+  enablePickFeatures: {
+    get: function () {
+      return this._tileProvider.enablePickFeatures;
+    },
+    set: function (enablePickFeatures) {
+      this._tileProvider.enablePickFeatures = enablePickFeatures;
+    },
+  },
 
-    /**
-     * The default parameters to include in the WMS URL to obtain images.  The values are as follows:
-     *    service=WMS
-     *    version=1.1.1
-     *    request=GetMap
-     *    styles=
-     *    format=image/jpeg
-     *
-     * @memberof WebMapServiceImageryProvider
-     */
-    WebMapServiceImageryProvider.DefaultParameters = freezeObject({
-        service : 'WMS',
-        version : '1.1.1',
-        request : 'GetMap',
-        styles : '',
-        format : 'image/jpeg'
-    });
+  /**
+   * Gets or sets a clock that is used to get keep the time used for time dynamic parameters.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Clock}
+   */
+  clock: {
+    get: function () {
+      return this._timeDynamicImagery.clock;
+    },
+    set: function (value) {
+      this._timeDynamicImagery.clock = value;
+    },
+  },
+  /**
+   * Gets or sets a time interval collection that is used to get time dynamic parameters. The data of each
+   * TimeInterval is an object containing the keys and values of the properties that are used during
+   * tile requests.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {TimeIntervalCollection}
+   */
+  times: {
+    get: function () {
+      return this._timeDynamicImagery.times;
+    },
+    set: function (value) {
+      this._timeDynamicImagery.times = value;
+    },
+  },
 
-    return WebMapServiceImageryProvider;
+  /**
+   * Gets the getFeatureInfo URL of the WMS server.
+   * @memberof WebMapServiceImageryProvider.prototype
+   * @type {Resource|String}
+   * @readonly
+   */
+  getFeatureInfoUrl: {
+    get: function () {
+      return this._getFeatureInfoUrl;
+    },
+  },
 });
+
+/**
+ * Gets the credits to be displayed when a given tile is displayed.
+ *
+ * @param {Number} x The tile X coordinate.
+ * @param {Number} y The tile Y coordinate.
+ * @param {Number} level The tile level;
+ * @returns {Credit[]} The credits to be displayed when the tile is displayed.
+ *
+ * @exception {DeveloperError} <code>getTileCredits</code> must not be called before the imagery provider is ready.
+ */
+WebMapServiceImageryProvider.prototype.getTileCredits = function (x, y, level) {
+  return this._tileProvider.getTileCredits(x, y, level);
+};
+
+/**
+ * Requests the image for a given tile.  This function should
+ * not be called before {@link WebMapServiceImageryProvider#ready} returns true.
+ *
+ * @param {Number} x The tile X coordinate.
+ * @param {Number} y The tile Y coordinate.
+ * @param {Number} level The tile level.
+ * @param {Request} [request] The request object. Intended for internal use only.
+ * @returns {Promise.<HTMLImageElement|HTMLCanvasElement>|undefined} A promise for the image that will resolve when the image is available, or
+ *          undefined if there are too many active requests to the server, and the request
+ *          should be retried later.  The resolved image may be either an
+ *          Image or a Canvas DOM object.
+ *
+ * @exception {DeveloperError} <code>requestImage</code> must not be called before the imagery provider is ready.
+ */
+WebMapServiceImageryProvider.prototype.requestImage = function (
+  x,
+  y,
+  level,
+  request
+) {
+  let result;
+  const timeDynamicImagery = this._timeDynamicImagery;
+  let currentInterval;
+
+  // Try and load from cache
+  if (defined(timeDynamicImagery)) {
+    currentInterval = timeDynamicImagery.currentInterval;
+    result = timeDynamicImagery.getFromCache(x, y, level, request);
+  }
+
+  // Couldn't load from cache
+  if (!defined(result)) {
+    result = requestImage(this, x, y, level, request, currentInterval);
+  }
+
+  // If we are approaching an interval, preload this tile in the next interval
+  if (defined(result) && defined(timeDynamicImagery)) {
+    timeDynamicImagery.checkApproachingInterval(x, y, level, request);
+  }
+
+  return result;
+};
+
+/**
+ * Asynchronously determines what features, if any, are located at a given longitude and latitude within
+ * a tile.  This function should not be called before {@link ImageryProvider#ready} returns true.
+ *
+ * @param {Number} x The tile X coordinate.
+ * @param {Number} y The tile Y coordinate.
+ * @param {Number} level The tile level.
+ * @param {Number} longitude The longitude at which to pick features.
+ * @param {Number} latitude  The latitude at which to pick features.
+ * @return {Promise.<ImageryLayerFeatureInfo[]>|undefined} A promise for the picked features that will resolve when the asynchronous
+ *                   picking completes.  The resolved value is an array of {@link ImageryLayerFeatureInfo}
+ *                   instances.  The array may be empty if no features are found at the given location.
+ *
+ * @exception {DeveloperError} <code>pickFeatures</code> must not be called before the imagery provider is ready.
+ */
+WebMapServiceImageryProvider.prototype.pickFeatures = function (
+  x,
+  y,
+  level,
+  longitude,
+  latitude
+) {
+  const timeDynamicImagery = this._timeDynamicImagery;
+  const currentInterval = defined(timeDynamicImagery)
+    ? timeDynamicImagery.currentInterval
+    : undefined;
+
+  return pickFeatures(this, x, y, level, longitude, latitude, currentInterval);
+};
+
+/**
+ * The default parameters to include in the WMS URL to obtain images.  The values are as follows:
+ *    service=WMS
+ *    version=1.1.1
+ *    request=GetMap
+ *    styles=
+ *    format=image/jpeg
+ *
+ * @constant
+ * @type {Object}
+ */
+WebMapServiceImageryProvider.DefaultParameters = Object.freeze({
+  service: "WMS",
+  version: "1.1.1",
+  request: "GetMap",
+  styles: "",
+  format: "image/jpeg",
+});
+
+/**
+ * The default parameters to include in the WMS URL to get feature information.  The values are as follows:
+ *     service=WMS
+ *     version=1.1.1
+ *     request=GetFeatureInfo
+ *
+ * @constant
+ * @type {Object}
+ */
+WebMapServiceImageryProvider.GetFeatureInfoDefaultParameters = Object.freeze({
+  service: "WMS",
+  version: "1.1.1",
+  request: "GetFeatureInfo",
+});
+
+WebMapServiceImageryProvider.DefaultGetFeatureInfoFormats = Object.freeze([
+  Object.freeze(new GetFeatureInfoFormat("json", "application/json")),
+  Object.freeze(new GetFeatureInfoFormat("xml", "text/xml")),
+  Object.freeze(new GetFeatureInfoFormat("text", "text/html")),
+]);
+
+function objectToLowercase(obj) {
+  const result = {};
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      result[key.toLowerCase()] = obj[key];
+    }
+  }
+  return result;
+}
+export default WebMapServiceImageryProvider;

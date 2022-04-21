@@ -1,219 +1,200 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/EllipsoidPrimitive',
-         'Specs/createContext',
-         'Specs/destroyContext',
-         'Specs/createCamera',
-         'Specs/createFrameState',
-         'Specs/createScene',
-         'Specs/destroyScene',
-         'Specs/pick',
-         'Specs/render',
-         'Core/Cartesian3',
-         'Core/defined',
-         'Core/Matrix4',
-         'Renderer/ClearCommand',
-         'Scene/Material'
-     ], function(
-         EllipsoidPrimitive,
-         createContext,
-         destroyContext,
-         createCamera,
-         createFrameState,
-         createScene,
-         destroyScene,
-         pick,
-         render,
-         Cartesian3,
-         defined,
-         Matrix4,
-         ClearCommand,
-         Material) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Cartesian3 } from "../../Source/Cesium.js";
+import { defined } from "../../Source/Cesium.js";
+import { Matrix4 } from "../../Source/Cesium.js";
+import { EllipsoidPrimitive } from "../../Source/Cesium.js";
+import { Material } from "../../Source/Cesium.js";
+import createScene from "../createScene.js";
 
-    var context;
-    var ellipsoid;
-    var frameState;
-    var us;
+describe(
+  "Scene/EllipsoidPrimitive",
+  function () {
+    let scene;
+    let ellipsoid;
 
-    beforeAll(function() {
-        context = createContext();
+    beforeAll(function () {
+      scene = createScene();
+      scene.primitives.destroyPrimitives = false;
+      scene.frameState.scene3DOnly = false;
     });
 
-    afterAll(function() {
-        destroyContext(context);
+    afterAll(function () {
+      scene.destroyForSpecs();
     });
 
-    beforeEach(function() {
-        ellipsoid = new EllipsoidPrimitive();
-        frameState = createFrameState(createCamera(context, new Cartesian3(1.02, 0.0, 0.0), Cartesian3.ZERO, Cartesian3.UNIT_Z));
-        us = context.getUniformState();
-        us.update(context, frameState);
+    beforeEach(function () {
+      ellipsoid = new EllipsoidPrimitive();
+      const offset = new Cartesian3(1.02, 0.0, 0.0);
+      scene.camera.lookAtTransform(Matrix4.IDENTITY, offset);
     });
 
-    afterEach(function() {
-        us = undefined;
-        if (defined(ellipsoid) && !ellipsoid.isDestroyed()) {
-            ellipsoid = ellipsoid.destroy();
-        }
+    afterEach(function () {
+      scene.primitives.removeAll();
+      if (defined(ellipsoid) && !ellipsoid.isDestroyed()) {
+        ellipsoid = ellipsoid.destroy();
+      }
     });
 
-    it('gets the default properties', function() {
-        expect(ellipsoid.show).toEqual(true);
-        expect(ellipsoid.center).toEqual(Cartesian3.ZERO);
-        expect(ellipsoid.radii).toBeUndefined();
-        expect(ellipsoid.modelMatrix).toEqual(Matrix4.IDENTITY);
-        expect(ellipsoid.material.type).toEqual(Material.ColorType);
-        expect(ellipsoid.debugShowBoundingVolume).toEqual(false);
+    it("gets the default properties", function () {
+      expect(ellipsoid.show).toEqual(true);
+      expect(ellipsoid.center).toEqual(Cartesian3.ZERO);
+      expect(ellipsoid.radii).toBeUndefined();
+      expect(ellipsoid.modelMatrix).toEqual(Matrix4.IDENTITY);
+      expect(ellipsoid.material.type).toEqual(Material.ColorType);
+      expect(ellipsoid.debugShowBoundingVolume).toEqual(false);
     });
 
-    it('Constructs with options', function() {
-        var material = Material.fromType(Material.StripeType);
-        var e = new EllipsoidPrimitive({
-            center : new Cartesian3(1.0, 2.0, 3.0),
-            radii : new Cartesian3(4.0, 5.0, 6.0),
-            modelMatrix : Matrix4.fromScale(2.0),
-            show : false,
-            material : material,
-            id : 'id',
-            debugShowBoundingVolume : true
-        });
+    it("Constructs with options", function () {
+      const material = Material.fromType(Material.StripeType);
+      const e = new EllipsoidPrimitive({
+        center: new Cartesian3(1.0, 2.0, 3.0),
+        radii: new Cartesian3(4.0, 5.0, 6.0),
+        modelMatrix: Matrix4.fromUniformScale(2.0),
+        show: false,
+        material: material,
+        id: "id",
+        debugShowBoundingVolume: true,
+      });
 
-        expect(e.center).toEqual(new Cartesian3(1.0, 2.0, 3.0));
-        expect(e.radii).toEqual(new Cartesian3(4.0, 5.0, 6.0));
-        expect(e.modelMatrix).toEqual(Matrix4.fromScale(2.0));
-        expect(e.show).toEqual(false);
-        expect(e.material).toBe(material);
-        expect(e.id).toEqual('id');
-        expect(e.debugShowBoundingVolume).toEqual(true);
+      expect(e.center).toEqual(new Cartesian3(1.0, 2.0, 3.0));
+      expect(e.radii).toEqual(new Cartesian3(4.0, 5.0, 6.0));
+      expect(e.modelMatrix).toEqual(Matrix4.fromUniformScale(2.0));
+      expect(e.show).toEqual(false);
+      expect(e.material).toBe(material);
+      expect(e.id).toEqual("id");
+      expect(e.debugShowBoundingVolume).toEqual(true);
 
-        e.destroy();
+      e.destroy();
     });
 
-    it('renders with the default material', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+    it("renders with the default material", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender([0, 0, 0, 255]);
 
-        render(context, frameState, ellipsoid);
-        expect(context.readPixels()).toNotEqual([0, 0, 0, 0]);
+      scene.primitives.add(ellipsoid);
+      expect(scene).notToRender([0, 0, 0, 255]);
     });
 
-    it('renders with a custom modelMatrix', function() {
-        ellipsoid.radii = new Cartesian3(0.1, 0.1, 0.1);
-        ellipsoid.modelMatrix = Matrix4.fromScale(new Cartesian3(10.0, 10.0, 10.0));
+    it("renders with a custom modelMatrix", function () {
+      ellipsoid.radii = new Cartesian3(0.1, 0.1, 0.1);
+      ellipsoid.modelMatrix = Matrix4.fromScale(
+        new Cartesian3(10.0, 10.0, 10.0)
+      );
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender([0, 0, 0, 255]);
 
-        render(context, frameState, ellipsoid);
-        expect(context.readPixels()).not.toEqual([0, 0, 0, 0]);
+      scene.primitives.add(ellipsoid);
+      expect(scene).notToRender([0, 0, 0, 255]);
     });
 
-    it('renders two with a vertex array cache hit', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        var ellipsoid2 = new EllipsoidPrimitive();
-        ellipsoid2.radii = new Cartesian3(1.0, 1.0, 1.0);
+    it("renders two with a vertex array cache hit", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      const ellipsoid2 = new EllipsoidPrimitive();
+      ellipsoid2.radii = new Cartesian3(1.0, 1.0, 1.0);
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender([0, 0, 0, 255]);
 
-        render(context, frameState, ellipsoid);
-        expect(context.readPixels()).not.toEqual([0, 0, 0, 0]);
+      scene.primitives.add(ellipsoid);
+      let result;
+      expect(scene).toRenderAndCall(function (rgba) {
+        result = rgba;
+        expect(rgba).not.toEqual([0, 0, 0, 255]);
+      });
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender(result);
 
-        render(context, frameState, ellipsoid2);
-        expect(context.readPixels()).not.toEqual([0, 0, 0, 0]);
+      scene.primitives.add(ellipsoid2);
+      expect(scene).notToRender([0, 0, 0, 255]);
+      expect(scene).notToRender(result);
 
-        ellipsoid2.destroy();
+      ellipsoid2.destroy();
     });
 
-    it('renders bounding volume with debugShowBoundingVolume', function() {
-        var scene = createScene();
-        scene.primitives.add(new EllipsoidPrimitive({
-            radii : new Cartesian3(1.0, 1.0, 1.0),
-            debugShowBoundingVolume : true
-        }));
+    it("renders bounding volume with debugShowBoundingVolume", function () {
+      const scene = createScene();
+      scene.primitives.add(
+        new EllipsoidPrimitive({
+          radii: new Cartesian3(1.0, 1.0, 1.0),
+          debugShowBoundingVolume: true,
+        })
+      );
 
-        var camera = scene.camera;
-        camera.position = new Cartesian3(1.02, 0.0, 0.0);
-        camera.direction = Cartesian3.negate(Cartesian3.UNIT_X);
-        camera.up = Cartesian3.clone(Cartesian3.UNIT_Z);
+      const camera = scene.camera;
+      camera.position = new Cartesian3(1.02, 0.0, 0.0);
+      camera.direction = Cartesian3.negate(Cartesian3.UNIT_X, new Cartesian3());
+      camera.up = Cartesian3.clone(Cartesian3.UNIT_Z);
 
-        scene.initializeFrame();
-        scene.render();
-        var pixels = scene.context.readPixels();
-        expect(pixels[0]).not.toEqual(0);
-        expect(pixels[1]).toEqual(0);
-        expect(pixels[2]).toEqual(0);
-        expect(pixels[3]).toEqual(255);
-
-        destroyScene(scene);
+      expect(scene).notToRender([0, 0, 0, 255]);
+      scene.destroyForSpecs();
     });
 
-    it('does not render when show is false', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.show = false;
+    it("does not render when show is false", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.show = false;
 
-        expect(render(context, frameState, ellipsoid)).toEqual(0);
+      expect(scene).toRender([0, 0, 0, 255]);
     });
 
-    it('does not render without radii', function() {
-        expect(render(context, frameState, ellipsoid)).toEqual(0);
+    it("does not render without radii", function () {
+      expect(scene).toRender([0, 0, 0, 255]);
     });
 
-    it('does not render when not in view due to center', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.center = new Cartesian3(10.0, 0.0, 0.0);
+    it("does not render when not in view due to center", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.center = new Cartesian3(10.0, 0.0, 0.0);
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender([0, 0, 0, 255]);
 
-        render(context, frameState, ellipsoid);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      scene.primitives.add(ellipsoid);
+      expect(scene).toRender([0, 0, 0, 255]);
     });
 
-    it('is picked', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.id = 'id';
+    it("is picked", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.id = "id";
 
-        var pickedObject = pick(context, frameState, ellipsoid, 0, 0);
-        expect(pickedObject.primitive).toEqual(ellipsoid);
-        expect(pickedObject.id).toEqual('id');
+      scene.primitives.add(ellipsoid);
+
+      expect(scene).toPickAndCall(function (result) {
+        expect(result.primitive).toEqual(ellipsoid);
+        expect(result.id).toEqual("id");
+      });
     });
 
-    it('is not picked (show === false)', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.show = false;
+    it("is not picked (show === false)", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.show = false;
 
-        var pickedObject = pick(context, frameState, ellipsoid, 0, 0);
-        expect(pickedObject).not.toBeDefined();
+      scene.primitives.add(ellipsoid);
+
+      expect(scene).notToPick();
     });
 
-    it('is not picked (alpha === 0.0)', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.material.uniforms.color.alpha = 0.0;
+    it("is not picked (alpha === 0.0)", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.material.uniforms.color.alpha = 0.0;
 
-        var pickedObject = pick(context, frameState, ellipsoid, 0, 0);
-        expect(pickedObject).not.toBeDefined();
+      scene.primitives.add(ellipsoid);
+
+      expect(scene).notToPick();
     });
 
-    it('isDestroyed', function() {
-        expect(ellipsoid.isDestroyed()).toEqual(false);
-        ellipsoid.destroy();
-        expect(ellipsoid.isDestroyed()).toEqual(true);
+    it("isDestroyed", function () {
+      expect(ellipsoid.isDestroyed()).toEqual(false);
+      ellipsoid.destroy();
+      expect(ellipsoid.isDestroyed()).toEqual(true);
     });
 
-    it('throws when rendered without a material', function() {
-        ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
-        ellipsoid.material = undefined;
+    it("throws when rendered without a material", function () {
+      ellipsoid.radii = new Cartesian3(1.0, 1.0, 1.0);
+      ellipsoid.material = undefined;
 
-        expect(function() {
-            render(context, frameState, ellipsoid);
-        }).toThrowDeveloperError();
+      scene.primitives.add(ellipsoid);
+
+      expect(function () {
+        scene.renderForSpecs();
+      }).toThrowDeveloperError();
     });
-}, 'WebGL');
+  },
+  "WebGL"
+);

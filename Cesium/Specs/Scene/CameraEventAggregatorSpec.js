@@ -1,230 +1,318 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/CameraEventAggregator',
-         'Scene/CameraEventType',
-         'Core/Cartesian2',
-         'Core/KeyboardEventModifier',
-         'Core/ScreenSpaceEventType',
-         'Specs/MockCanvas'
-     ], function(
-         CameraEventAggregator,
-         CameraEventType,
-         Cartesian2,
-         KeyboardEventModifier,
-         ScreenSpaceEventType,
-         MockCanvas) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Cartesian2 } from "../../Source/Cesium.js";
+import { combine } from "../../Source/Cesium.js";
+import { FeatureDetection } from "../../Source/Cesium.js";
+import { KeyboardEventModifier } from "../../Source/Cesium.js";
+import { CameraEventAggregator } from "../../Source/Cesium.js";
+import { CameraEventType } from "../../Source/Cesium.js";
+import createCanvas from "../createCanvas.js";
+import DomEventSimulator from "../DomEventSimulator.js";
 
-    var canvas;
-    var handler;
-    var handler2;
+describe("Scene/CameraEventAggregator", function () {
+  let usePointerEvents;
+  let canvas;
+  let handler;
+  let handler2;
 
-    var MouseButtons = MockCanvas.MouseButtons;
+  beforeAll(function () {
+    usePointerEvents = FeatureDetection.supportsPointerEvents();
+    canvas = createCanvas(1024, 768);
+  });
 
-    beforeEach(function() {
-        // create a mock canvas object to add events to so they are callable.
-        canvas = new MockCanvas();
-        handler = new CameraEventAggregator(canvas);
-    });
+  afterAll(function () {
+    document.body.removeChild(canvas);
+  });
 
-    afterEach(function() {
-        handler = handler && !handler.isDestroyed() && handler.destroy();
-        handler2 = handler2 && !handler2.isDestroyed() && handler2.destroy();
-    });
+  beforeEach(function () {
+    handler = new CameraEventAggregator(canvas);
+  });
 
-    it('throws without a canvas', function() {
-        expect(function() {
-            handler2 = new CameraEventAggregator();
-        }).toThrowDeveloperError();
-    });
+  afterEach(function () {
+    handler = handler && !handler.isDestroyed() && handler.destroy();
+    handler2 = handler2 && !handler2.isDestroyed() && handler2.destroy();
+  });
 
-    it('getMovement throws without a type', function() {
-        expect(function() {
-            handler.getMovement();
-        }).toThrowDeveloperError();
-    });
+  const MouseButtons = {
+    LEFT: 0,
+    MIDDLE: 1,
+    RIGHT: 2,
+  };
 
-    it('isMoving throws without a type', function() {
-        expect(function() {
-            handler.isMoving();
-        }).toThrowDeveloperError();
-    });
+  function simulateMouseDown(options) {
+    if (usePointerEvents) {
+      DomEventSimulator.firePointerDown(
+        canvas,
+        combine(options, {
+          pointerType: "mouse",
+        })
+      );
+    } else {
+      DomEventSimulator.fireMouseDown(canvas, options);
+    }
+  }
 
-    it('isButtonDown throws without a type', function() {
-        expect(function() {
-            handler.isButtonDown();
-        }).toThrowDeveloperError();
-    });
+  function simulateMouseUp(options) {
+    if (usePointerEvents) {
+      DomEventSimulator.firePointerUp(
+        canvas,
+        combine(options, {
+          pointerType: "mouse",
+        })
+      );
+    } else {
+      DomEventSimulator.fireMouseUp(canvas, options);
+    }
+  }
 
-    it('getButtonPressTime throws without a type', function() {
-        expect(function() {
-            handler.getButtonPressTime();
-        }).toThrowDeveloperError();
-    });
+  function simulateMouseMove(options) {
+    if (usePointerEvents) {
+      DomEventSimulator.firePointerMove(
+        canvas,
+        combine(options, {
+          pointerType: "mouse",
+        })
+      );
+    } else {
+      DomEventSimulator.fireMouseMove(canvas, options);
+    }
+  }
 
-    it('getButtonReleaseTime throws without a type', function() {
-        expect(function() {
-            handler.getButtonReleaseTime();
-        }).toThrowDeveloperError();
-    });
+  function moveMouse(button, startPosition, endPosition, shiftKey) {
+    const canvasRect = canvas.getBoundingClientRect();
 
-    it('getMovement', function() {
-        var startPosition = Cartesian2.ZERO;
-        var endPosition = Cartesian2.UNIT_X;
+    const options = {
+      button: button,
+      clientX: startPosition.x + canvasRect.left,
+      clientY: startPosition.y + canvasRect.top,
+      shiftKey: shiftKey,
+    };
+    simulateMouseDown(options);
+    options.clientX = endPosition.x + canvasRect.left;
+    options.clientY = endPosition.y + canvasRect.top;
+    simulateMouseMove(options);
+    simulateMouseUp(options);
+  }
 
-        MockCanvas.moveMouse(canvas, MouseButtons.LEFT, startPosition, endPosition);
-        var movement = handler.getMovement(CameraEventType.LEFT_DRAG);
-        expect(movement).toBeDefined();
-        expect(movement.startPosition).toEqual(startPosition);
-        expect(movement.endPosition).toEqual(endPosition);
+  it("throws without a canvas", function () {
+    expect(function () {
+      handler2 = new CameraEventAggregator();
+    }).toThrowDeveloperError();
+  });
 
-        MockCanvas.moveMouse(canvas, MouseButtons.RIGHT, startPosition, endPosition, true);
-        movement = handler.getMovement(CameraEventType.RIGHT_DRAG, KeyboardEventModifier.SHIFT);
-        expect(movement).toBeDefined();
-        expect(movement.startPosition).toEqual(startPosition);
-        expect(movement.endPosition).toEqual(endPosition);
-    });
+  it("getMovement throws without a type", function () {
+    expect(function () {
+      handler.getMovement();
+    }).toThrowDeveloperError();
+  });
 
-    it('getLastMovement', function() {
-        expect(handler.getLastMovement(CameraEventType.LEFT_DRAG)).toBeUndefined();
-        var startPosition = Cartesian2.ZERO;
-        var endPosition = Cartesian2.UNIT_X;
-        var endPosition2 = Cartesian2.UNIT_Y;
+  it("isMoving throws without a type", function () {
+    expect(function () {
+      handler.isMoving();
+    }).toThrowDeveloperError();
+  });
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : startPosition.x,
-            clientY : startPosition.y
-        };
-        canvas.fireEvents('mousedown', args);
-        args.clientX = endPosition.x;
-        args.clientY = endPosition.y;
-        canvas.fireEvents('mousemove', args);
-        handler.reset();
-        args.clientX = endPosition2.x;
-        args.clientY = endPosition2.y;
-        canvas.fireEvents('mousemove', args);
+  it("isButtonDown throws without a type", function () {
+    expect(function () {
+      handler.isButtonDown();
+    }).toThrowDeveloperError();
+  });
 
-        var movement = handler.getLastMovement(CameraEventType.LEFT_DRAG);
-        expect(movement).toBeDefined();
-        expect(movement.startPosition).toEqual(startPosition);
-        expect(movement.endPosition).toEqual(endPosition);
-    });
+  it("getButtonPressTime throws without a type", function () {
+    expect(function () {
+      handler.getButtonPressTime();
+    }).toThrowDeveloperError();
+  });
 
-    it('isMoving', function() {
-        expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(false);
-        var startPosition = Cartesian2.ZERO;
-        var endPosition = Cartesian2.UNIT_X;
+  it("getButtonReleaseTime throws without a type", function () {
+    expect(function () {
+      handler.getButtonReleaseTime();
+    }).toThrowDeveloperError();
+  });
 
-        MockCanvas.moveMouse(canvas, MouseButtons.LEFT, startPosition, endPosition);
-        expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(true);
-        handler.reset();
-        expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(false);
-    });
+  it("getMovement", function () {
+    const startPosition = Cartesian2.ZERO;
+    const endPosition = Cartesian2.UNIT_X;
 
-    it('isButtonDown', function() {
-        expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
+    moveMouse(MouseButtons.LEFT, startPosition, endPosition);
+    let movement = handler.getMovement(CameraEventType.LEFT_DRAG);
+    expect(movement).toBeDefined();
+    expect(movement.startPosition).toEqual(startPosition);
+    expect(movement.endPosition).toEqual(endPosition);
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : 0,
-            clientY : 0
-        };
-        canvas.fireEvents('mousedown', args);
+    moveMouse(MouseButtons.RIGHT, startPosition, endPosition, true);
+    movement = handler.getMovement(
+      CameraEventType.RIGHT_DRAG,
+      KeyboardEventModifier.SHIFT
+    );
+    expect(movement).toBeDefined();
+    expect(movement.startPosition).toEqual(startPosition);
+    expect(movement.endPosition).toEqual(endPosition);
+  });
 
-        expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(true);
-        canvas.fireEvents('mouseup', args);
-        expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
-    });
+  it("getLastMovement", function () {
+    expect(handler.getLastMovement(CameraEventType.LEFT_DRAG)).toBeUndefined();
+    const startPosition = Cartesian2.ZERO;
+    const endPosition = Cartesian2.UNIT_X;
+    const endPosition2 = Cartesian2.UNIT_Y;
 
-    it('anyButtonDown', function() {
-        expect(handler.anyButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
+    const canvasRect = canvas.getBoundingClientRect();
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : 0,
-            clientY : 0
-        };
-        canvas.fireEvents('mousedown', args);
-        expect(handler.anyButtonDown(CameraEventType.LEFT_DRAG)).toEqual(true);
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: startPosition.x + canvasRect.left,
+      clientY: startPosition.y + canvasRect.top,
+    };
+    simulateMouseDown(options);
+    options.clientX = endPosition.x + canvasRect.left;
+    options.clientY = endPosition.y + canvasRect.top;
+    simulateMouseMove(options);
+    handler.reset();
+    options.clientX = endPosition2.x + canvasRect.left;
+    options.clientY = endPosition2.y + canvasRect.top;
+    simulateMouseMove(options);
 
-        args.button = MouseButtons.RIGHT;
-        canvas.fireEvents('mousedown', args);
-        expect(handler.anyButtonDown(CameraEventType.LEFT_DRAG)).toEqual(true);
+    const movement = handler.getLastMovement(CameraEventType.LEFT_DRAG);
+    expect(movement).toBeDefined();
+    expect(movement.startPosition).toEqual(startPosition);
+    expect(movement.endPosition).toEqual(endPosition);
+  });
 
-        canvas.fireEvents('mouseup', args);
-        expect(handler.anyButtonDown(CameraEventType.LEFT_DRAG)).toEqual(true);
+  it("isMoving", function () {
+    expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(false);
+    const startPosition = Cartesian2.ZERO;
+    const endPosition = Cartesian2.UNIT_X;
 
-        args.button = MouseButtons.LEFT;
-        canvas.fireEvents('mouseup', args);
-        expect(handler.anyButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
-    });
+    moveMouse(MouseButtons.LEFT, startPosition, endPosition);
+    expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(true);
+    handler.reset();
+    expect(handler.isMoving(CameraEventType.LEFT_DRAG)).toEqual(false);
+  });
 
-    it('getButtonPressTime', function() {
-        expect(handler.getButtonPressTime(CameraEventType.LEFT_DRAG)).toBeUndefined();
+  it("isButtonDown", function () {
+    expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : 0,
-            clientY : 0
-        };
-        var before = new Date();
-        canvas.fireEvents('mousedown', args);
-        var after = new Date();
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: 0,
+      clientY: 0,
+    };
+    simulateMouseDown(options);
 
-        var downTime = handler.getButtonPressTime(CameraEventType.LEFT_DRAG);
-        expect(downTime).toBeDefined();
-        expect(downTime.getTime()).toBeGreaterThanOrEqualTo(before.getTime());
-        expect(downTime.getTime()).toBeLessThanOrEqualTo(after.getTime());
-    });
+    expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(true);
+    simulateMouseUp(options);
+    expect(handler.isButtonDown(CameraEventType.LEFT_DRAG)).toEqual(false);
+  });
 
-    it('getButtonReleaseTime', function() {
-        expect(handler.getButtonReleaseTime(CameraEventType.LEFT_DRAG)).toBeUndefined();
+  it("anyButtonDown", function () {
+    expect(handler.anyButtonDown).toEqual(false);
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : 0,
-            clientY : 0
-        };
-        canvas.fireEvents('mousedown', args);
-        var before = new Date();
-        canvas.fireEvents('mouseup', args);
-        var after = new Date();
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: 0,
+      clientY: 0,
+    };
+    simulateMouseDown(options);
+    expect(handler.anyButtonDown).toEqual(true);
 
-        var upTime = handler.getButtonReleaseTime(CameraEventType.LEFT_DRAG);
-        expect(upTime).toBeDefined();
-        expect(upTime.getTime()).toBeGreaterThanOrEqualTo(before.getTime());
-        expect(upTime.getTime()).toBeLessThanOrEqualTo(after.getTime());
-    });
+    options.button = MouseButtons.RIGHT;
+    simulateMouseDown(options);
+    expect(handler.anyButtonDown).toEqual(true);
 
-    it('aggregates events', function() {
-        var startPosition = Cartesian2.ZERO;
-        var endPosition = Cartesian2.UNIT_X;
-        var endPosition2 = Cartesian2.UNIT_Y;
+    simulateMouseUp(options);
 
-        var args = {
-            button : MouseButtons.LEFT,
-            clientX : startPosition.x,
-            clientY : startPosition.y
-        };
-        canvas.fireEvents('mousedown', args);
-        args.clientX = endPosition.x;
-        args.clientY = endPosition.y;
-        canvas.fireEvents('mousemove', args);
-        args.clientX = endPosition2.x;
-        args.clientY = endPosition2.y;
-        canvas.fireEvents('mousemove', args);
+    options.button = MouseButtons.LEFT;
+    simulateMouseUp(options);
 
-        var movement = handler.getMovement(CameraEventType.LEFT_DRAG);
-        expect(movement).toBeDefined();
-        expect(movement.startPosition).toEqual(startPosition);
-        expect(movement.endPosition).toEqual(endPosition2);
-    });
+    expect(handler.anyButtonDown).toEqual(false);
+  });
 
-    it('isDestroyed', function() {
-        expect(handler.isDestroyed()).toEqual(false);
-        handler.destroy();
-        expect(handler.isDestroyed()).toEqual(true);
-    });
+  it("cancels anyButtonDown on any button up", function () {
+    expect(handler.anyButtonDown).toEqual(false);
+
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: 0,
+      clientY: 0,
+    };
+    simulateMouseDown(options);
+
+    options.button = MouseButtons.RIGHT;
+    simulateMouseDown(options);
+
+    simulateMouseUp(options);
+
+    expect(handler.anyButtonDown).toEqual(false);
+  });
+
+  it("getButtonPressTime", function () {
+    expect(
+      handler.getButtonPressTime(CameraEventType.LEFT_DRAG)
+    ).toBeUndefined();
+
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: 0,
+      clientY: 0,
+    };
+    const before = new Date();
+    simulateMouseDown(options);
+    const after = new Date();
+
+    const downTime = handler.getButtonPressTime(CameraEventType.LEFT_DRAG);
+    expect(downTime).toBeDefined();
+    expect(downTime.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(downTime.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
+  it("getButtonReleaseTime", function () {
+    expect(
+      handler.getButtonReleaseTime(CameraEventType.LEFT_DRAG)
+    ).toBeUndefined();
+
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: 0,
+      clientY: 0,
+    };
+    simulateMouseDown(options);
+    const before = new Date();
+    simulateMouseUp(options);
+    const after = new Date();
+
+    const upTime = handler.getButtonReleaseTime(CameraEventType.LEFT_DRAG);
+    expect(upTime).toBeDefined();
+    expect(upTime.getTime()).toBeGreaterThanOrEqual(before.getTime());
+    expect(upTime.getTime()).toBeLessThanOrEqual(after.getTime());
+  });
+
+  it("aggregates events", function () {
+    const startPosition = Cartesian2.ZERO;
+    const endPosition = Cartesian2.UNIT_X;
+    const endPosition2 = Cartesian2.UNIT_Y;
+
+    const canvasRect = canvas.getBoundingClientRect();
+
+    const options = {
+      button: MouseButtons.LEFT,
+      clientX: startPosition.x + canvasRect.left,
+      clientY: startPosition.y + canvasRect.top,
+    };
+    simulateMouseDown(options);
+    options.clientX = endPosition.x + canvasRect.left;
+    options.clientY = endPosition.y + canvasRect.top;
+    simulateMouseMove(options);
+    options.clientX = endPosition2.x + canvasRect.left;
+    options.clientY = endPosition2.y + canvasRect.top;
+    simulateMouseMove(options);
+
+    const movement = handler.getMovement(CameraEventType.LEFT_DRAG);
+    expect(movement).toBeDefined();
+    expect(movement.startPosition).toEqual(startPosition);
+    expect(movement.endPosition).toEqual(endPosition2);
+  });
+
+  it("isDestroyed", function () {
+    expect(handler.isDestroyed()).toEqual(false);
+    handler.destroy();
+    expect(handler.isDestroyed()).toEqual(true);
+  });
 });

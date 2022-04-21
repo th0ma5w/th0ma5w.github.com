@@ -1,572 +1,514 @@
-/*global define*/
-define([
-        '../Core/ComponentDatatype',
-        '../Core/defaultValue',
-        '../Core/defined',
-        '../Core/destroyObject',
-        '../Core/DeveloperError',
-        '../Core/Math',
-        './BufferUsage'
-    ], function(
-        ComponentDatatype,
-        defaultValue,
-        defined,
-        destroyObject,
-        DeveloperError,
-        CesiumMath,
-        BufferUsage) {
-    "use strict";
-
-    /**
-     * DOC_TBA
-     *
-     * @alias VertexArrayFacade
-     *
-     * @constructor
-     *
-     * @exception {DeveloperError} Attribute must have a componentsPerAttribute.
-     * @exception {DeveloperError} Attribute must have a valid componentDatatype or not specify it.
-     * @exception {DeveloperError} Attribute must have a valid usage or not specify it.
-     * @exception {DeveloperError} Index n is used by more than one attribute.
-     */
-    var VertexArrayFacade = function(context, attributes, sizeInVertices) {
-        //>>includeStart('debug', pragmas.debug);
-        if (!context) {
-            throw new DeveloperError('context is required.');
-        }
-        if (!attributes || (attributes.length === 0)) {
-            throw new DeveloperError('At least one attribute is required.');
-        }
-        //>>includeEnd('debug');
-
-        var attrs = VertexArrayFacade._verifyAttributes(attributes);
-        sizeInVertices = sizeInVertices || 0;
-        var attributesByPurposeAndUsage = {};
-        var precreatedAttributes = [];
-        var attributesByUsage;
-        var attributesForUsage;
-        var purpose;
-        var usage;
-
-        // Bucket the attributes first by purpose and second by usage.
-        var length = attrs.length;
-        for (var i = 0; i < length; ++i) {
-            var attribute = attrs[i];
-
-            // If the attribute already has a vertex buffer, we do not need
-            // to manage a vertex buffer or typed array for it.
-            if (attribute.vertexBuffer) {
-                precreatedAttributes.push(attribute);
-                continue;
-            }
-
-            purpose = attribute.purpose;
-            attributesByUsage = attributesByPurposeAndUsage[purpose];
-            if (!defined(attributesByUsage)) {
-                attributesByUsage = attributesByPurposeAndUsage[purpose] = {};
-            }
-
-            usage = attribute.usage.toString();
-            attributesForUsage = attributesByUsage[usage];
-            if (!defined(attributesForUsage)) {
-                attributesForUsage = attributesByUsage[usage] = [];
-            }
-
-            attributesForUsage.push(attribute);
-        }
-
-        // A function to sort attributes by the size of their components.  From left to right, a vertex
-        // stores floats, shorts, and then bytes.
-        function compare(left, right) {
-            return right.componentDatatype.sizeInBytes - left.componentDatatype.sizeInBytes;
-        }
-
-        // Create a buffer description for each purpose/usage combination.
-        this._buffersByPurposeAndUsage = {};
-        this._allBuffers = [];
-
-        for (purpose in attributesByPurposeAndUsage) {
-            if (attributesByPurposeAndUsage.hasOwnProperty(purpose)) {
-                attributesByUsage = attributesByPurposeAndUsage[purpose];
-
-                var buffersByUsage = this._buffersByPurposeAndUsage[purpose];
-                if (!defined(buffersByUsage)) {
-                    buffersByUsage = this._buffersByPurposeAndUsage[purpose] = {};
-                }
-
-                for (usage in attributesByUsage) {
-                    if (attributesByUsage.hasOwnProperty(usage)) {
-                        attributesForUsage = attributesByUsage[usage];
-
-                        attributesForUsage.sort(compare);
-                        var vertexSizeInBytes = VertexArrayFacade._vertexSizeInBytes(attributesForUsage);
-
-                        var usageEnum;
-                        switch (usage) {
-                        case BufferUsage.STATIC_DRAW.toString():
-                            usageEnum = BufferUsage.STATIC_DRAW;
-                            break;
-                        case BufferUsage.STREAM_DRAW.toString():
-                            usageEnum = BufferUsage.STREAM_DRAW;
-                            break;
-                        case BufferUsage.DYNAMIC_DRAW.toString():
-                            usageEnum = BufferUsage.DYNAMIC_DRAW;
-                            break;
-                        }
-
-                        var buffer = {
-                            purpose : purpose,
-
-                            vertexSizeInBytes : vertexSizeInBytes,
-
-                            vertexBuffer : undefined,
-                            usage : usageEnum,
-                            needsCommit : false,
-
-                            arrayBuffer : undefined,
-                            arrayViews : VertexArrayFacade._createArrayViews(attributesForUsage, vertexSizeInBytes)
-                        };
-
-                        buffersByUsage[usage] = buffer;
-                        this._allBuffers.push(buffer);
-                    }
-                }
-            }
-        }
-
-        this._size = 0;
-
-        this._precreated = precreatedAttributes;
-        this._context = context;
-
-        /**
-         * DOC_TBA
-         */
-        this.writers = undefined;
-
-        /**
-         * DOC_TBA
-         */
-        this.vaByPurpose = undefined;
-
-        this.resize(sizeInVertices);
-    };
-
-    VertexArrayFacade._verifyAttributes = function(attributes) {
-        var attrs = [];
-
-        for ( var i = 0; i < attributes.length; ++i) {
-            var attribute = attributes[i];
-
-            var attr = {
-                index : defaultValue(attribute.index, i),
-                enabled : defaultValue(attribute.enabled, true),
-                componentsPerAttribute : attribute.componentsPerAttribute,
-                componentDatatype : attribute.componentDatatype || ComponentDatatype.FLOAT,
-                normalize : attribute.normalize || false,
-                purpose : defaultValue(attribute.purpose, 'all'),
-
-                // There will be either a vertexBuffer or an [optional] usage.
-                vertexBuffer : attribute.vertexBuffer,
-                usage : attribute.usage || BufferUsage.STATIC_DRAW
-            };
-            attrs.push(attr);
-
-            if ((attr.componentsPerAttribute !== 1) && (attr.componentsPerAttribute !== 2) && (attr.componentsPerAttribute !== 3) && (attr.componentsPerAttribute !== 4)) {
-                throw new DeveloperError('attribute.componentsPerAttribute must be in the range [1, 4].');
-            }
-
-            var datatype = attr.componentDatatype;
-            if (!ComponentDatatype.validate(datatype)) {
-                throw new DeveloperError('Attribute must have a valid componentDatatype or not specify it.');
-            }
-
-            if (!BufferUsage.validate(attr.usage)) {
-                throw new DeveloperError('Attribute must have a valid usage or not specify it.');
-            }
-        }
-
-        // Verify all attribute names are unique.
-        // Multiple attributes can share a name as long as they have different purposes.
-        var uniqueIndices = new Array(attrs.length);
-        for ( var j = 0; j < attrs.length; ++j) {
-            var currentAttr = attrs[j];
-            var index = currentAttr.index;
-            var purpose = currentAttr.purpose;
-
-            if (purpose !== 'all') {
-                var uniqueIndex = uniqueIndices[index];
-                if (uniqueIndex === true) {
-                    throw new DeveloperError('Index ' + index + ' is used by more than one attribute.');
-                }
-                if (defined(uniqueIndex)) {
-                    if (uniqueIndex[purpose]) {
-                        throw new DeveloperError('Index ' + index + ' is used by more than one attribute with the same purpose.');
-                    }
-                } else {
-                    uniqueIndex = uniqueIndices[index] = {};
-                }
-                uniqueIndex[purpose] = true;
-            } else {
-                if (uniqueIndices[index]) {
-                    throw new DeveloperError('Index ' + index + ' is used by more than one attribute.');
-                }
-                uniqueIndices[index] = true;
-            }
-        }
-
-        return attrs;
-    };
-
-    VertexArrayFacade._vertexSizeInBytes = function(attributes) {
-        var sizeInBytes = 0;
-
-        var length = attributes.length;
-        for ( var i = 0; i < length; ++i) {
-            var attribute = attributes[i];
-            sizeInBytes += (attribute.componentsPerAttribute * attribute.componentDatatype.sizeInBytes);
-        }
-
-        var maxComponentSizeInBytes = (length > 0) ? attributes[0].componentDatatype.sizeInBytes : 0; // Sorted by size
-        var remainder = (maxComponentSizeInBytes > 0) ? (sizeInBytes % maxComponentSizeInBytes) : 0;
-        var padding = (remainder === 0) ? 0 : (maxComponentSizeInBytes - remainder);
-        sizeInBytes += padding;
-
-        return sizeInBytes;
-    };
-
-    VertexArrayFacade._createArrayViews = function(attributes, vertexSizeInBytes) {
-        var views = [];
-        var offsetInBytes = 0;
-
-        var length = attributes.length;
-        for ( var i = 0; i < length; ++i) {
-            var attribute = attributes[i];
-            var componentDatatype = attribute.componentDatatype;
-
-            views.push({
-                index : attribute.index,
-                enabled : attribute.enabled,
-                componentsPerAttribute : attribute.componentsPerAttribute,
-                componentDatatype : componentDatatype,
-                normalize : attribute.normalize,
-
-                offsetInBytes : offsetInBytes,
-                vertexSizeInComponentType : vertexSizeInBytes / componentDatatype.sizeInBytes,
-
-                view : undefined
-            });
-
-            offsetInBytes += (attribute.componentsPerAttribute * componentDatatype.sizeInBytes);
-        }
-
-        return views;
-    };
-
-    /**
-     * DOC_TBA
-     *
-     * Invalidates writers.  Can't render again until commit is called.
-     *
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.resize = function(sizeInVertices) {
-        this._size = sizeInVertices;
-
-        var allBuffers = this._allBuffers;
-        this.writers = {};
-
-        for (var i = 0, len = allBuffers.length; i < len; ++i) {
-            var buffer = allBuffers[i];
-            VertexArrayFacade._resize(buffer, this._size);
-
-            var writersForPurpose = this.writers[buffer.purpose];
-            if (!defined(writersForPurpose)) {
-                writersForPurpose = this.writers[buffer.purpose] = [];
-            }
-
-            // Reserving invalidates the writers, so if client's cache them, they need to invalidate their cache.
-            VertexArrayFacade._appendWriters(writersForPurpose, buffer);
-        }
-
-        // VAs are recreated next time commit is called.
-        destroyVA(this);
-    };
-
-    VertexArrayFacade._resize = function(buffer, size) {
-        if (buffer.vertexSizeInBytes > 0) {
-            // Create larger array buffer
-            var arrayBuffer = new ArrayBuffer(size * buffer.vertexSizeInBytes);
-
-            // Copy contents from previous array buffer
-            if (buffer.arrayBuffer) {
-                var destView = new Uint8Array(arrayBuffer);
-                var sourceView = new Uint8Array(buffer.arrayBuffer);
-                var sourceLength = sourceView.length;
-                for ( var j = 0; j < sourceLength; ++j) {
-                    destView[j] = sourceView[j];
-                }
-            }
-
-            // Create typed views into the new array buffer
-            var views = buffer.arrayViews;
-            var length = views.length;
-            for ( var i = 0; i < length; ++i) {
-                var view = views[i];
-                view.view = ComponentDatatype.createArrayBufferView(view.componentDatatype, arrayBuffer, view.offsetInBytes);
-            }
-
-            buffer.arrayBuffer = arrayBuffer;
-        }
-    };
-
-    var createWriters = [
-    // 1 component per attribute
-    function(buffer, view, vertexSizeInComponentType) {
-        return function(index, attribute) {
-            view[index * vertexSizeInComponentType] = attribute;
-            buffer.needsCommit = true;
-        };
-    },
-
-    // 2 component per attribute
-    function(buffer, view, vertexSizeInComponentType) {
-        return function(index, component0, component1) {
-            var i = index * vertexSizeInComponentType;
-            view[i] = component0;
-            view[i + 1] = component1;
-            buffer.needsCommit = true;
-        };
-    },
-
-    // 3 component per attribute
-    function(buffer, view, vertexSizeInComponentType) {
-        return function(index, component0, component1, component2) {
-            var i = index * vertexSizeInComponentType;
-            view[i] = component0;
-            view[i + 1] = component1;
-            view[i + 2] = component2;
-            buffer.needsCommit = true;
-        };
-    },
-
-    // 4 component per attribute
-    function(buffer, view, vertexSizeInComponentType) {
-        return function(index, component0, component1, component2, component3) {
-            var i = index * vertexSizeInComponentType;
-            view[i] = component0;
-            view[i + 1] = component1;
-            view[i + 2] = component2;
-            view[i + 3] = component3;
-            buffer.needsCommit = true;
-        };
-    }];
-
-    VertexArrayFacade._appendWriters = function(writers, buffer) {
-        var arrayViews = buffer.arrayViews;
-        var length = arrayViews.length;
-        for ( var i = 0; i < length; ++i) {
-            var arrayView = arrayViews[i];
-            writers[arrayView.index] = createWriters[arrayView.componentsPerAttribute - 1](buffer, arrayView.view, arrayView.vertexSizeInComponentType);
-        }
-    };
-
-    /**
-     * DOC_TBA
-     *
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.commit = function(indexBuffer) {
-        var recreateVA = false;
-
-        var allBuffers = this._allBuffers;
-        var buffer;
-
-        for (var i = 0, len = allBuffers.length; i < len; ++i) {
-            buffer = allBuffers[i];
-            recreateVA = commit(this, buffer) || recreateVA;
-        }
-
-        ///////////////////////////////////////////////////////////////////////
-
-        if (recreateVA || !defined(this.vaByPurpose)) {
-            var buffersByPurposeAndUsage = this._buffersByPurposeAndUsage;
-
-            destroyVA(this);
-            this.vaByPurpose = {};
-
-            for (var purpose in buffersByPurposeAndUsage) {
-                if (buffersByPurposeAndUsage.hasOwnProperty(purpose)) {
-                    var buffersByUsage = buffersByPurposeAndUsage[purpose];
-
-                    var va = [];
-                    var numberOfVertexArrays = Math.ceil(this._size / CesiumMath.SIXTY_FOUR_KILOBYTES);
-                    for ( var k = 0; k < numberOfVertexArrays; ++k) {
-                        var attributes = [];
-
-                        // Add all-purpose attributes
-                        var allPurposeBuffersByUsage = buffersByPurposeAndUsage.all;
-                        if (allPurposeBuffersByUsage !== buffersByUsage) {
-                            for (var allPurposeUsage in allPurposeBuffersByUsage) {
-                                if (allPurposeBuffersByUsage.hasOwnProperty(allPurposeUsage)) {
-                                    var allPurposeBuffer = allPurposeBuffersByUsage[allPurposeUsage];
-                                    VertexArrayFacade._appendAttributes(attributes, allPurposeBuffer, k * (allPurposeBuffer.vertexSizeInBytes * CesiumMath.SIXTY_FOUR_KILOBYTES));
-                                }
-                            }
-                        }
-
-                        // Add purpose-specific attributes
-                        for (var usage in buffersByUsage) {
-                            if (buffersByUsage.hasOwnProperty(usage)) {
-                                buffer = buffersByUsage[usage];
-                                VertexArrayFacade._appendAttributes(attributes, buffer, k * (buffer.vertexSizeInBytes * CesiumMath.SIXTY_FOUR_KILOBYTES));
-                            }
-                        }
-
-                        attributes = attributes.concat(this._precreated);
-
-                        va.push({
-                            va : this._context.createVertexArray(attributes, indexBuffer),
-                            indicesCount : 1.5 * ((k !== (numberOfVertexArrays - 1)) ? CesiumMath.SIXTY_FOUR_KILOBYTES : (this._size % CesiumMath.SIXTY_FOUR_KILOBYTES))
-                        // TODO: not hardcode 1.5
-                        });
-                    }
-
-                    this.vaByPurpose[purpose] = va;
-                }
-            }
-        }
-    };
-
-    function commit(vertexArrayFacade, buffer) {
-        if (buffer.needsCommit && (buffer.vertexSizeInBytes > 0)) {
-            buffer.needsCommit = false;
-
-            var vertexBuffer = buffer.vertexBuffer;
-            var vertexBufferSizeInBytes = vertexArrayFacade._size * buffer.vertexSizeInBytes;
-            var vertexBufferDefined = defined(vertexBuffer);
-            if (!vertexBufferDefined || (vertexBuffer.getSizeInBytes() < vertexBufferSizeInBytes)) {
-                if (vertexBufferDefined) {
-                    vertexBuffer.destroy();
-                }
-                buffer.vertexBuffer = vertexArrayFacade._context.createVertexBuffer(buffer.arrayBuffer, buffer.usage);
-                buffer.vertexBuffer.setVertexArrayDestroyable(false);
-
-                return true; // Created new vertex buffer
-            }
-
-            buffer.vertexBuffer.copyFromArrayView(buffer.arrayBuffer);
-        }
-
-        return false; // Did not create new vertex buffer
+import Check from "../Core/Check.js";
+import ComponentDatatype from "../Core/ComponentDatatype.js";
+import defaultValue from "../Core/defaultValue.js";
+import defined from "../Core/defined.js";
+import destroyObject from "../Core/destroyObject.js";
+import DeveloperError from "../Core/DeveloperError.js";
+import CesiumMath from "../Core/Math.js";
+import Buffer from "./Buffer.js";
+import BufferUsage from "./BufferUsage.js";
+import VertexArray from "./VertexArray.js";
+
+/**
+ * @private
+ */
+function VertexArrayFacade(context, attributes, sizeInVertices, instanced) {
+  //>>includeStart('debug', pragmas.debug);
+  Check.defined("context", context);
+  if (!attributes || attributes.length === 0) {
+    throw new DeveloperError("At least one attribute is required.");
+  }
+  //>>includeEnd('debug');
+
+  const attrs = VertexArrayFacade._verifyAttributes(attributes);
+  sizeInVertices = defaultValue(sizeInVertices, 0);
+  const precreatedAttributes = [];
+  const attributesByUsage = {};
+  let attributesForUsage;
+  let usage;
+
+  // Bucket the attributes by usage.
+  const length = attrs.length;
+  for (let i = 0; i < length; ++i) {
+    const attribute = attrs[i];
+
+    // If the attribute already has a vertex buffer, we do not need
+    // to manage a vertex buffer or typed array for it.
+    if (attribute.vertexBuffer) {
+      precreatedAttributes.push(attribute);
+      continue;
     }
 
-    VertexArrayFacade._appendAttributes = function(attributes, buffer, vertexBufferOffset) {
-        var arrayViews = buffer.arrayViews;
-        var length = arrayViews.length;
-        for ( var i = 0; i < length; ++i) {
-            var view = arrayViews[i];
-
-            attributes.push({
-                index : view.index,
-                enabled : view.enabled,
-                componentsPerAttribute : view.componentsPerAttribute,
-                componentDatatype : view.componentDatatype,
-                normalize : view.normalize,
-                vertexBuffer : buffer.vertexBuffer,
-                offsetInBytes : vertexBufferOffset + view.offsetInBytes,
-                strideInBytes : buffer.vertexSizeInBytes
-            });
-        }
-    };
-
-    /**
-     * DOC_TBA
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.subCommit = function(offsetInVertices, lengthInVertices) {
-        //>>includeStart('debug', pragmas.debug);
-        if (offsetInVertices < 0 || offsetInVertices >= this._size) {
-            throw new DeveloperError('offsetInVertices must be greater than or equal to zero and less than the vertex array size.');
-        }
-        if (offsetInVertices + lengthInVertices > this._size) {
-            throw new DeveloperError('offsetInVertices + lengthInVertices cannot exceed the vertex array size.');
-        }
-        //>>includeEnd('debug');
-
-        var allBuffers = this._allBuffers;
-        for (var i = 0, len = allBuffers.length; i < len; ++i) {
-            subCommit(allBuffers[i], offsetInVertices, lengthInVertices);
-        }
-    };
-
-    function subCommit(buffer, offsetInVertices, lengthInVertices) {
-        if (buffer.needsCommit && (buffer.vertexSizeInBytes > 0)) {
-            var byteOffset = buffer.vertexSizeInBytes * offsetInVertices;
-            var byteLength = buffer.vertexSizeInBytes * lengthInVertices;
-
-            // PERFORMANCE_IDEA: If we want to get really crazy, we could consider updating
-            // individual attributes instead of the entire (sub-)vertex.
-            //
-            // PERFORMANCE_IDEA: Does creating the typed view add too much GC overhead?
-            buffer.vertexBuffer.copyFromArrayView(new Uint8Array(buffer.arrayBuffer, byteOffset, byteLength), byteOffset);
-        }
+    usage = attribute.usage;
+    attributesForUsage = attributesByUsage[usage];
+    if (!defined(attributesForUsage)) {
+      attributesForUsage = attributesByUsage[usage] = [];
     }
 
-    /**
-     * DOC_TBA
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.endSubCommits = function() {
-        var allBuffers = this._allBuffers;
+    attributesForUsage.push(attribute);
+  }
 
-        for (var i = 0, len = allBuffers.length; i < len; ++i) {
-            allBuffers[i].needsCommit = false;
-        }
+  // A function to sort attributes by the size of their components.  From left to right, a vertex
+  // stores floats, shorts, and then bytes.
+  function compare(left, right) {
+    return (
+      ComponentDatatype.getSizeInBytes(right.componentDatatype) -
+      ComponentDatatype.getSizeInBytes(left.componentDatatype)
+    );
+  }
+
+  this._allBuffers = [];
+
+  for (usage in attributesByUsage) {
+    if (attributesByUsage.hasOwnProperty(usage)) {
+      attributesForUsage = attributesByUsage[usage];
+
+      attributesForUsage.sort(compare);
+      const vertexSizeInBytes = VertexArrayFacade._vertexSizeInBytes(
+        attributesForUsage
+      );
+
+      const bufferUsage = attributesForUsage[0].usage;
+
+      const buffer = {
+        vertexSizeInBytes: vertexSizeInBytes,
+        vertexBuffer: undefined,
+        usage: bufferUsage,
+        needsCommit: false,
+        arrayBuffer: undefined,
+        arrayViews: VertexArrayFacade._createArrayViews(
+          attributesForUsage,
+          vertexSizeInBytes
+        ),
+      };
+
+      this._allBuffers.push(buffer);
+    }
+  }
+
+  this._size = 0;
+  this._instanced = defaultValue(instanced, false);
+
+  this._precreated = precreatedAttributes;
+  this._context = context;
+
+  this.writers = undefined;
+  this.va = undefined;
+
+  this.resize(sizeInVertices);
+}
+VertexArrayFacade._verifyAttributes = function (attributes) {
+  const attrs = [];
+
+  for (let i = 0; i < attributes.length; ++i) {
+    const attribute = attributes[i];
+
+    const attr = {
+      index: defaultValue(attribute.index, i),
+      enabled: defaultValue(attribute.enabled, true),
+      componentsPerAttribute: attribute.componentsPerAttribute,
+      componentDatatype: defaultValue(
+        attribute.componentDatatype,
+        ComponentDatatype.FLOAT
+      ),
+      normalize: defaultValue(attribute.normalize, false),
+
+      // There will be either a vertexBuffer or an [optional] usage.
+      vertexBuffer: attribute.vertexBuffer,
+      usage: defaultValue(attribute.usage, BufferUsage.STATIC_DRAW),
     };
+    attrs.push(attr);
 
-    function destroyVA(vertexArrayFacade) {
-        var vaByPurpose = vertexArrayFacade.vaByPurpose;
-        if (!defined(vaByPurpose)) {
-            return;
-        }
-
-        for (var purpose in vaByPurpose) {
-            if (vaByPurpose.hasOwnProperty(purpose)) {
-                var va = vaByPurpose[purpose];
-                var length = va.length;
-                for (var i = 0; i < length; ++i) {
-                    va[i].va.destroy();
-                }
-            }
-        }
-
-        vertexArrayFacade.vaByPurpose = undefined;
+    //>>includeStart('debug', pragmas.debug);
+    if (
+      attr.componentsPerAttribute !== 1 &&
+      attr.componentsPerAttribute !== 2 &&
+      attr.componentsPerAttribute !== 3 &&
+      attr.componentsPerAttribute !== 4
+    ) {
+      throw new DeveloperError(
+        "attribute.componentsPerAttribute must be in the range [1, 4]."
+      );
     }
 
-    /**
-     * DOC_TBA
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.isDestroyed = function() {
-        return false;
+    const datatype = attr.componentDatatype;
+    if (!ComponentDatatype.validate(datatype)) {
+      throw new DeveloperError(
+        "Attribute must have a valid componentDatatype or not specify it."
+      );
+    }
+
+    if (!BufferUsage.validate(attr.usage)) {
+      throw new DeveloperError(
+        "Attribute must have a valid usage or not specify it."
+      );
+    }
+    //>>includeEnd('debug');
+  }
+
+  // Verify all attribute names are unique.
+  const uniqueIndices = new Array(attrs.length);
+  for (let j = 0; j < attrs.length; ++j) {
+    const currentAttr = attrs[j];
+    const index = currentAttr.index;
+    //>>includeStart('debug', pragmas.debug);
+    if (uniqueIndices[index]) {
+      throw new DeveloperError(
+        `Index ${index} is used by more than one attribute.`
+      );
+    }
+    //>>includeEnd('debug');
+    uniqueIndices[index] = true;
+  }
+
+  return attrs;
+};
+
+VertexArrayFacade._vertexSizeInBytes = function (attributes) {
+  let sizeInBytes = 0;
+
+  const length = attributes.length;
+  for (let i = 0; i < length; ++i) {
+    const attribute = attributes[i];
+    sizeInBytes +=
+      attribute.componentsPerAttribute *
+      ComponentDatatype.getSizeInBytes(attribute.componentDatatype);
+  }
+
+  const maxComponentSizeInBytes =
+    length > 0
+      ? ComponentDatatype.getSizeInBytes(attributes[0].componentDatatype)
+      : 0; // Sorted by size
+  const remainder =
+    maxComponentSizeInBytes > 0 ? sizeInBytes % maxComponentSizeInBytes : 0;
+  const padding = remainder === 0 ? 0 : maxComponentSizeInBytes - remainder;
+  sizeInBytes += padding;
+
+  return sizeInBytes;
+};
+
+VertexArrayFacade._createArrayViews = function (attributes, vertexSizeInBytes) {
+  const views = [];
+  let offsetInBytes = 0;
+
+  const length = attributes.length;
+  for (let i = 0; i < length; ++i) {
+    const attribute = attributes[i];
+    const componentDatatype = attribute.componentDatatype;
+
+    views.push({
+      index: attribute.index,
+      enabled: attribute.enabled,
+      componentsPerAttribute: attribute.componentsPerAttribute,
+      componentDatatype: componentDatatype,
+      normalize: attribute.normalize,
+
+      offsetInBytes: offsetInBytes,
+      vertexSizeInComponentType:
+        vertexSizeInBytes / ComponentDatatype.getSizeInBytes(componentDatatype),
+
+      view: undefined,
+    });
+
+    offsetInBytes +=
+      attribute.componentsPerAttribute *
+      ComponentDatatype.getSizeInBytes(componentDatatype);
+  }
+
+  return views;
+};
+
+/**
+ * Invalidates writers.  Can't render again until commit is called.
+ */
+VertexArrayFacade.prototype.resize = function (sizeInVertices) {
+  this._size = sizeInVertices;
+
+  const allBuffers = this._allBuffers;
+  this.writers = [];
+
+  for (let i = 0, len = allBuffers.length; i < len; ++i) {
+    const buffer = allBuffers[i];
+
+    VertexArrayFacade._resize(buffer, this._size);
+
+    // Reserving invalidates the writers, so if client's cache them, they need to invalidate their cache.
+    VertexArrayFacade._appendWriters(this.writers, buffer);
+  }
+
+  // VAs are recreated next time commit is called.
+  destroyVA(this);
+};
+
+VertexArrayFacade._resize = function (buffer, size) {
+  if (buffer.vertexSizeInBytes > 0) {
+    // Create larger array buffer
+    const arrayBuffer = new ArrayBuffer(size * buffer.vertexSizeInBytes);
+
+    // Copy contents from previous array buffer
+    if (defined(buffer.arrayBuffer)) {
+      const destView = new Uint8Array(arrayBuffer);
+      const sourceView = new Uint8Array(buffer.arrayBuffer);
+      const sourceLength = sourceView.length;
+      for (let j = 0; j < sourceLength; ++j) {
+        destView[j] = sourceView[j];
+      }
+    }
+
+    // Create typed views into the new array buffer
+    const views = buffer.arrayViews;
+    const length = views.length;
+    for (let i = 0; i < length; ++i) {
+      const view = views[i];
+      view.view = ComponentDatatype.createArrayBufferView(
+        view.componentDatatype,
+        arrayBuffer,
+        view.offsetInBytes
+      );
+    }
+
+    buffer.arrayBuffer = arrayBuffer;
+  }
+};
+
+const createWriters = [
+  // 1 component per attribute
+  function (buffer, view, vertexSizeInComponentType) {
+    return function (index, attribute) {
+      view[index * vertexSizeInComponentType] = attribute;
+      buffer.needsCommit = true;
     };
+  },
 
-    /**
-     * DOC_TBA
-     * @memberof VertexArrayFacade
-     */
-    VertexArrayFacade.prototype.destroy = function() {
-        var allBuffers = this._allBuffers;
-        for (var i = 0, len = allBuffers.length; i < len; ++i) {
-            var buffer = allBuffers[i];
-            buffer.vertexBuffer = buffer.vertexBuffer && buffer.vertexBuffer.destroy();
-        }
-
-        destroyVA(this);
-
-        return destroyObject(this);
+  // 2 component per attribute
+  function (buffer, view, vertexSizeInComponentType) {
+    return function (index, component0, component1) {
+      const i = index * vertexSizeInComponentType;
+      view[i] = component0;
+      view[i + 1] = component1;
+      buffer.needsCommit = true;
     };
+  },
 
-    return VertexArrayFacade;
-});
+  // 3 component per attribute
+  function (buffer, view, vertexSizeInComponentType) {
+    return function (index, component0, component1, component2) {
+      const i = index * vertexSizeInComponentType;
+      view[i] = component0;
+      view[i + 1] = component1;
+      view[i + 2] = component2;
+      buffer.needsCommit = true;
+    };
+  },
+
+  // 4 component per attribute
+  function (buffer, view, vertexSizeInComponentType) {
+    return function (index, component0, component1, component2, component3) {
+      const i = index * vertexSizeInComponentType;
+      view[i] = component0;
+      view[i + 1] = component1;
+      view[i + 2] = component2;
+      view[i + 3] = component3;
+      buffer.needsCommit = true;
+    };
+  },
+];
+
+VertexArrayFacade._appendWriters = function (writers, buffer) {
+  const arrayViews = buffer.arrayViews;
+  const length = arrayViews.length;
+  for (let i = 0; i < length; ++i) {
+    const arrayView = arrayViews[i];
+    writers[arrayView.index] = createWriters[
+      arrayView.componentsPerAttribute - 1
+    ](buffer, arrayView.view, arrayView.vertexSizeInComponentType);
+  }
+};
+
+VertexArrayFacade.prototype.commit = function (indexBuffer) {
+  let recreateVA = false;
+
+  const allBuffers = this._allBuffers;
+  let buffer;
+  let i;
+  let length;
+
+  for (i = 0, length = allBuffers.length; i < length; ++i) {
+    buffer = allBuffers[i];
+    recreateVA = commit(this, buffer) || recreateVA;
+  }
+
+  ///////////////////////////////////////////////////////////////////////
+
+  if (recreateVA || !defined(this.va)) {
+    destroyVA(this);
+    const va = (this.va = []);
+
+    const chunkSize = CesiumMath.SIXTY_FOUR_KILOBYTES - 4; // The 65535 index is reserved for primitive restart. Reserve the last 4 indices so that billboard quads are not broken up.
+    const numberOfVertexArrays =
+      defined(indexBuffer) && !this._instanced
+        ? Math.ceil(this._size / chunkSize)
+        : 1;
+    for (let k = 0; k < numberOfVertexArrays; ++k) {
+      let attributes = [];
+      for (i = 0, length = allBuffers.length; i < length; ++i) {
+        buffer = allBuffers[i];
+        const offset = k * (buffer.vertexSizeInBytes * chunkSize);
+        VertexArrayFacade._appendAttributes(
+          attributes,
+          buffer,
+          offset,
+          this._instanced
+        );
+      }
+
+      attributes = attributes.concat(this._precreated);
+
+      va.push({
+        va: new VertexArray({
+          context: this._context,
+          attributes: attributes,
+          indexBuffer: indexBuffer,
+        }),
+        indicesCount:
+          1.5 *
+          (k !== numberOfVertexArrays - 1 ? chunkSize : this._size % chunkSize),
+        // TODO: not hardcode 1.5, this assumes 6 indices per 4 vertices (as for Billboard quads).
+      });
+    }
+  }
+};
+
+function commit(vertexArrayFacade, buffer) {
+  if (buffer.needsCommit && buffer.vertexSizeInBytes > 0) {
+    buffer.needsCommit = false;
+
+    const vertexBuffer = buffer.vertexBuffer;
+    const vertexBufferSizeInBytes =
+      vertexArrayFacade._size * buffer.vertexSizeInBytes;
+    const vertexBufferDefined = defined(vertexBuffer);
+    if (
+      !vertexBufferDefined ||
+      vertexBuffer.sizeInBytes < vertexBufferSizeInBytes
+    ) {
+      if (vertexBufferDefined) {
+        vertexBuffer.destroy();
+      }
+      buffer.vertexBuffer = Buffer.createVertexBuffer({
+        context: vertexArrayFacade._context,
+        typedArray: buffer.arrayBuffer,
+        usage: buffer.usage,
+      });
+      buffer.vertexBuffer.vertexArrayDestroyable = false;
+
+      return true; // Created new vertex buffer
+    }
+
+    buffer.vertexBuffer.copyFromArrayView(buffer.arrayBuffer);
+  }
+
+  return false; // Did not create new vertex buffer
+}
+
+VertexArrayFacade._appendAttributes = function (
+  attributes,
+  buffer,
+  vertexBufferOffset,
+  instanced
+) {
+  const arrayViews = buffer.arrayViews;
+  const length = arrayViews.length;
+  for (let i = 0; i < length; ++i) {
+    const view = arrayViews[i];
+
+    attributes.push({
+      index: view.index,
+      enabled: view.enabled,
+      componentsPerAttribute: view.componentsPerAttribute,
+      componentDatatype: view.componentDatatype,
+      normalize: view.normalize,
+      vertexBuffer: buffer.vertexBuffer,
+      offsetInBytes: vertexBufferOffset + view.offsetInBytes,
+      strideInBytes: buffer.vertexSizeInBytes,
+      instanceDivisor: instanced ? 1 : 0,
+    });
+  }
+};
+
+VertexArrayFacade.prototype.subCommit = function (
+  offsetInVertices,
+  lengthInVertices
+) {
+  //>>includeStart('debug', pragmas.debug);
+  if (offsetInVertices < 0 || offsetInVertices >= this._size) {
+    throw new DeveloperError(
+      "offsetInVertices must be greater than or equal to zero and less than the vertex array size."
+    );
+  }
+  if (offsetInVertices + lengthInVertices > this._size) {
+    throw new DeveloperError(
+      "offsetInVertices + lengthInVertices cannot exceed the vertex array size."
+    );
+  }
+  //>>includeEnd('debug');
+
+  const allBuffers = this._allBuffers;
+  for (let i = 0, len = allBuffers.length; i < len; ++i) {
+    subCommit(allBuffers[i], offsetInVertices, lengthInVertices);
+  }
+};
+
+function subCommit(buffer, offsetInVertices, lengthInVertices) {
+  if (buffer.needsCommit && buffer.vertexSizeInBytes > 0) {
+    const byteOffset = buffer.vertexSizeInBytes * offsetInVertices;
+    const byteLength = buffer.vertexSizeInBytes * lengthInVertices;
+
+    // PERFORMANCE_IDEA: If we want to get really crazy, we could consider updating
+    // individual attributes instead of the entire (sub-)vertex.
+    //
+    // PERFORMANCE_IDEA: Does creating the typed view add too much GC overhead?
+    buffer.vertexBuffer.copyFromArrayView(
+      new Uint8Array(buffer.arrayBuffer, byteOffset, byteLength),
+      byteOffset
+    );
+  }
+}
+
+VertexArrayFacade.prototype.endSubCommits = function () {
+  const allBuffers = this._allBuffers;
+
+  for (let i = 0, len = allBuffers.length; i < len; ++i) {
+    allBuffers[i].needsCommit = false;
+  }
+};
+
+function destroyVA(vertexArrayFacade) {
+  const va = vertexArrayFacade.va;
+  if (!defined(va)) {
+    return;
+  }
+
+  const length = va.length;
+  for (let i = 0; i < length; ++i) {
+    va[i].va.destroy();
+  }
+
+  vertexArrayFacade.va = undefined;
+}
+
+VertexArrayFacade.prototype.isDestroyed = function () {
+  return false;
+};
+
+VertexArrayFacade.prototype.destroy = function () {
+  const allBuffers = this._allBuffers;
+  for (let i = 0, len = allBuffers.length; i < len; ++i) {
+    const buffer = allBuffers[i];
+    buffer.vertexBuffer = buffer.vertexBuffer && buffer.vertexBuffer.destroy();
+  }
+
+  destroyVA(this);
+
+  return destroyObject(this);
+};
+export default VertexArrayFacade;

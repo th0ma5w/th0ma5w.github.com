@@ -1,70 +1,59 @@
-/*global define*/
-define([
-        'Core/defaultValue',
-        'Core/defined',
-        'Core/Intersect',
-        'Renderer/Pass',
-        'Scene/SceneMode'
-     ], function(
-         defaultValue,
-         defined,
-         Intersect,
-         Pass,
-         SceneMode) {
-    "use strict";
+import { defined } from "../Source/Cesium.js";
+import { Intersect } from "../Source/Cesium.js";
+import { Pass } from "../Source/Cesium.js";
+import { SceneMode } from "../Source/Cesium.js";
 
-    function executeCommands(context, frameState, commands) {
-        var commandsExecuted = 0;
-        var cullingVolume = frameState.cullingVolume;
-        var occluder;
-        if (frameState.mode === SceneMode.SCENE3D) {
-            occluder = frameState.occluder;
-        }
+function executeCommands(frameState, commands) {
+  let commandsExecuted = 0;
+  const cullingVolume = frameState.cullingVolume;
+  let occluder;
+  if (frameState.mode === SceneMode.SCENE3D) {
+    occluder = frameState.occluder;
+  }
 
-        var length = commands.length;
-        for (var i = 0; i < length; ++i) {
-            var command = commands[i];
-            var boundingVolume = command.boundingVolume;
-            if (defined(boundingVolume)) {
-                if (cullingVolume.getVisibility(boundingVolume) === Intersect.OUTSIDE ||
-                        (defined(occluder) && !occluder.isBoundingSphereVisible(boundingVolume))) {
-                    continue;
-                }
-            }
-
-            command.execute(context);
-            commandsExecuted++;
-        }
-
-        return commandsExecuted;
+  const length = commands.length;
+  for (let i = 0; i < length; ++i) {
+    const command = commands[i];
+    const boundingVolume = command.boundingVolume;
+    if (defined(boundingVolume)) {
+      if (
+        cullingVolume.computeVisibility(boundingVolume) === Intersect.OUTSIDE ||
+        (defined(occluder) && !occluder.isBoundingSphereVisible(boundingVolume))
+      ) {
+        continue;
+      }
     }
 
-    function render(context, frameState, primitive, commands) {
-        commands = defaultValue(commands, []);
-        primitive.update(context, frameState, commands);
+    command.execute(frameState.context);
+    commandsExecuted++;
+  }
 
-        var opaqueCommands = [];
-        var translucentCommands = [];
-        var overlayCommands = [];
+  return commandsExecuted;
+}
 
-        var length = commands.length;
-        for (var i = 0; i < length; i++) {
-            var command = commands[i];
-            if (command.pass === Pass.OPAQUE) {
-                opaqueCommands.push(command);
-            } else if (command.pass === Pass.TRANSLUCENT) {
-                translucentCommands.push(command);
-            } else if (command.pass === Pass.OVERLAY) {
-                overlayCommands.push(command);
-            }
-        }
+function render(frameState, primitive) {
+  frameState.commandList.length = 0;
+  primitive.update(frameState);
 
-        var commandsExecuted = executeCommands(context, frameState, opaqueCommands);
-        commandsExecuted += executeCommands(context, frameState, translucentCommands);
-        commandsExecuted += executeCommands(context, frameState, overlayCommands);
+  let i;
+  const renderCommands = new Array(Pass.NUMBER_OF_PASSES);
+  for (i = 0; i < Pass.NUMBER_OF_PASSES; ++i) {
+    renderCommands[i] = [];
+  }
 
-        return commandsExecuted;
-    }
+  const commands = frameState.commandList;
+  const length = commands.length;
+  for (i = 0; i < length; i++) {
+    const command = commands[i];
+    const pass = defined(command.pass) ? command.pass : Pass.OPAQUE;
+    renderCommands[pass].push(command);
+  }
 
-    return render;
-});
+  let commandsExecuted = 0;
+  for (i = 0; i < Pass.NUMBER_OF_PASSES; ++i) {
+    commandsExecuted += executeCommands(frameState, renderCommands[i]);
+  }
+
+  return commandsExecuted;
+}
+export default render;

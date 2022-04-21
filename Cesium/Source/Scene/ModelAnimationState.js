@@ -1,12 +1,7 @@
-/*global define*/
-define(function() {
-    "use strict";
-
-    /**
-     * @private
-     */
-    return {
-        STOPPED : 0,
-        ANIMATING : 1
-    };
+/**
+ * @private
+ */
+export default Object.freeze({
+  STOPPED: 0,
+  ANIMATING: 1,
 });

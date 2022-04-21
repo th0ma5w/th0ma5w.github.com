@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * Computes the luminance of a color. \n\
  *\n\
  * @name czm_luminance\n\
@@ -23,4 +20,3 @@ float czm_luminance(vec3 rgb)\n\
     return dot(rgb, W);\n\
 }\n\
 ";
-});

@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * Transforms a position from eye to window coordinates.  The transformation\n\
  * from eye to clip coordinates is done using {@link czm_projection}.\n\
  * The transform from normalized device coordinates to window coordinates is\n\
@@ -35,4 +32,3 @@ vec4 czm_eyeToWindowCoordinates(vec4 positionEC)\n\
     return q;\n\
 }\n\
 ";
-});

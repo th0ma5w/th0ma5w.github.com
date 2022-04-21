@@ -1,95 +1,98 @@
-/*global define*/
-define(function() {
-    "use strict";
+import WebGLConstants from "../Core/WebGLConstants.js";
 
-    /**
-     * DOC_TBA
-     *
-     * @exports PixelDatatype
-     */
-    var PixelDatatype = {
-        /**
-         * 0x1401. 8-bit unsigned byte.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_BYTE : 0x1401,
+/**
+ * The data type of a pixel.
+ *
+ * @enum {Number}
+ * @see PostProcessStage
+ */
+const PixelDatatype = {
+  UNSIGNED_BYTE: WebGLConstants.UNSIGNED_BYTE,
+  UNSIGNED_SHORT: WebGLConstants.UNSIGNED_SHORT,
+  UNSIGNED_INT: WebGLConstants.UNSIGNED_INT,
+  FLOAT: WebGLConstants.FLOAT,
+  HALF_FLOAT: WebGLConstants.HALF_FLOAT_OES,
+  UNSIGNED_INT_24_8: WebGLConstants.UNSIGNED_INT_24_8,
+  UNSIGNED_SHORT_4_4_4_4: WebGLConstants.UNSIGNED_SHORT_4_4_4_4,
+  UNSIGNED_SHORT_5_5_5_1: WebGLConstants.UNSIGNED_SHORT_5_5_5_1,
+  UNSIGNED_SHORT_5_6_5: WebGLConstants.UNSIGNED_SHORT_5_6_5,
+};
 
-        /**
-         * 0x1403. An unsigned short pixel datatype used for depth textures with 16-bit depth values.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_SHORT : 0x1403,
+/**
+  @private
+*/
+PixelDatatype.toWebGLConstant = function (pixelDatatype, context) {
+  switch (pixelDatatype) {
+    case PixelDatatype.UNSIGNED_BYTE:
+      return WebGLConstants.UNSIGNED_BYTE;
+    case PixelDatatype.UNSIGNED_SHORT:
+      return WebGLConstants.UNSIGNED_SHORT;
+    case PixelDatatype.UNSIGNED_INT:
+      return WebGLConstants.UNSIGNED_INT;
+    case PixelDatatype.FLOAT:
+      return WebGLConstants.FLOAT;
+    case PixelDatatype.HALF_FLOAT:
+      return context.webgl2
+        ? WebGLConstants.HALF_FLOAT
+        : WebGLConstants.HALF_FLOAT_OES;
+    case PixelDatatype.UNSIGNED_INT_24_8:
+      return WebGLConstants.UNSIGNED_INT_24_8;
+    case PixelDatatype.UNSIGNED_SHORT_4_4_4_4:
+      return WebGLConstants.UNSIGNED_SHORT_4_4_4_4;
+    case PixelDatatype.UNSIGNED_SHORT_5_5_5_1:
+      return WebGLConstants.UNSIGNED_SHORT_5_5_5_1;
+    case PixelDatatype.UNSIGNED_SHORT_5_6_5:
+      return PixelDatatype.UNSIGNED_SHORT_5_6_5;
+  }
+};
 
-        /**
-         * 0x1405. An unsigned int pixel datatype used for depth textures with 32-bit depth values.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_INT : 0x1405,
+/**
+  @private
+*/
+PixelDatatype.isPacked = function (pixelDatatype) {
+  return (
+    pixelDatatype === PixelDatatype.UNSIGNED_INT_24_8 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_4_4_4_4 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_5_5_1 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_6_5
+  );
+};
 
-        /**
-         * 0x1406. 32-bit floating-point.
-         *
-         * @type {Number}
-         * @constant
-         */
-        FLOAT : 0x1406,
+/**
+  @private
+*/
+PixelDatatype.sizeInBytes = function (pixelDatatype) {
+  switch (pixelDatatype) {
+    case PixelDatatype.UNSIGNED_BYTE:
+      return 1;
+    case PixelDatatype.UNSIGNED_SHORT:
+    case PixelDatatype.UNSIGNED_SHORT_4_4_4_4:
+    case PixelDatatype.UNSIGNED_SHORT_5_5_5_1:
+    case PixelDatatype.UNSIGNED_SHORT_5_6_5:
+    case PixelDatatype.HALF_FLOAT:
+      return 2;
+    case PixelDatatype.UNSIGNED_INT:
+    case PixelDatatype.FLOAT:
+    case PixelDatatype.UNSIGNED_INT_24_8:
+      return 4;
+  }
+};
 
-        /**
-         * 0x84FA. An unsigned int pixel datatype used for depth-stencil textures with 24-bit depth and 8-bit stencil values.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_INT_24_8_WEBGL : 0x84FA,
+/**
+  @private
+*/
+PixelDatatype.validate = function (pixelDatatype) {
+  return (
+    pixelDatatype === PixelDatatype.UNSIGNED_BYTE ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT ||
+    pixelDatatype === PixelDatatype.UNSIGNED_INT ||
+    pixelDatatype === PixelDatatype.FLOAT ||
+    pixelDatatype === PixelDatatype.HALF_FLOAT ||
+    pixelDatatype === PixelDatatype.UNSIGNED_INT_24_8 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_4_4_4_4 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_5_5_1 ||
+    pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_6_5
+  );
+};
 
-        /**
-         * 0x8033. An unsigned short pixel datatype with 4 bytes for each R, G, B, and A component.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_SHORT_4_4_4_4 : 0x8033,
-
-        /**
-         * 0x8034. An unsigned short pixel datatype with 5 bits for R, G, and B components, and 1 byte for A.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_SHORT_5_5_5_1 : 0x8034,
-
-        /**
-         * 0x8363. An unsigned short pixel datatype with 5 bits for R, 6 for G, and 5 for B.
-         *
-         * @type {Number}
-         * @constant
-         */
-        UNSIGNED_SHORT_5_6_5 : 0x8363,
-
-        /**
-         * DOC_TBA
-         *
-         * @param {PixelDatatype} pixelDatatype
-         *
-         * @returns {Boolean}
-         */
-        validate : function(pixelDatatype) {
-            return ((pixelDatatype === PixelDatatype.UNSIGNED_BYTE) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_SHORT) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_INT) ||
-                    (pixelDatatype === PixelDatatype.FLOAT) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_INT_24_8_WEBGL) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_SHORT_4_4_4_4) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_5_5_1) ||
-                    (pixelDatatype === PixelDatatype.UNSIGNED_SHORT_5_6_5));
-        }
-    };
-
-    return PixelDatatype;
-});
+export default Object.freeze(PixelDatatype);

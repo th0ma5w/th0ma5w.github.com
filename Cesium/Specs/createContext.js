@@ -1,68 +1,38 @@
-/*global define*/
-define([
-        'Core/clone',
-        'Core/defaultValue',
-        'Core/defined',
-        'Renderer/Context',
-        'Specs/createCanvas',
-        'Specs/createFrameState'
-    ], function(
-        clone,
-        defaultValue,
-        defined,
-        Context,
-        createCanvas,
-        createFrameState) {
-    "use strict";
-    /*global unescape*/
+import { clone } from "../Source/Cesium.js";
+import { defaultValue } from "../Source/Cesium.js";
+import { Context } from "../Source/Cesium.js";
+import createCanvas from "./createCanvas.js";
+import createFrameState from "./createFrameState.js";
+import getWebGLStub from "./getWebGLStub.js";
 
-    function getQueryParameters() {
-        var queryParameters = {};
+function createContext(options, canvasWidth, canvasHeight) {
+  // clone options so we can change properties
+  options = clone(defaultValue(options, {}));
+  options.webgl = clone(defaultValue(options.webgl, {}));
+  options.webgl.antialias = defaultValue(options.webgl.antialias, false);
+  if (!!window.webglStub) {
+    options.getWebGLStub = getWebGLStub;
+  }
 
-        var search = window.location.search;
-        if (search.length > 1) {
-            search = search.substr(1);
-            var parameters = search.split('&');
-            for (var i = 0; i < parameters.length; ++i) {
-                if (parameters[i].length > 0) {
-                    var index = parameters[i].indexOf('=');
-                    if (index !== -1) {
-                        var key = parameters[i].substr(0, index);
-                        var value = unescape(parameters[i].substr(index + 1));
-                        queryParameters[key] = value;
-                    } else {
-                        queryParameters[parameters[i]] = '';
-                    }
-                }
-            }
-        }
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const context = new Context(canvas, options);
 
-        return queryParameters;
-    }
+  if (!!window.webglValidation) {
+    context.validateShaderProgram = true;
+    context.validateFramebuffer = true;
+    context.logShaderCompilation = true;
+    context.throwOnWebGLError = true;
+  }
 
-    function createContext(options, canvasWidth, canvasHeight) {
-        // clone options so we can change properties
-        options = clone(defaultValue(options, {}));
-        options.webgl = clone(defaultValue(options.webgl, {}));
-        options.webgl.alpha = defaultValue(options.webgl.alpha, true);
-        options.webgl.antialias = defaultValue(options.webgl.antialias, false);
+  const us = context.uniformState;
+  us.update(createFrameState(context));
 
-        var canvas = createCanvas(canvasWidth, canvasHeight);
-        var context = new Context(canvas, options);
+  // Add function for test
+  context.destroyForSpecs = function () {
+    document.body.removeChild(context.canvas);
+    return context.destroy();
+  };
 
-        var parameters = getQueryParameters();
-        if (!defined(parameters.skipWebGLValidation)) {
-            context.setValidateShaderProgram(true);
-            context.setValidateFramebuffer(true);
-            context.setLogShaderCompilation(true);
-            context.setThrowOnWebGLError(true);
-        }
-
-        var us = context.getUniformState();
-        us.update(context, createFrameState());
-
-        return context;
-    }
-
-    return createContext;
-});
+  return context;
+}
+export default createContext;

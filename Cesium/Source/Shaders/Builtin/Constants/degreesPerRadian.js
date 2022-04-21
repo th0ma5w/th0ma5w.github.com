@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * A built-in GLSL floating-point constant for converting radians to degrees.\n\
  *\n\
  * @alias czm_degreesPerRadian\n\
@@ -17,5 +14,5 @@
  * // Example\n\
  * float deg = czm_degreesPerRadian * rad;\n\
  */\n\
-const float czm_degreesPerRadian = 57.29577951308232;";
-});
+const float czm_degreesPerRadian = 57.29577951308232;\n\
+";

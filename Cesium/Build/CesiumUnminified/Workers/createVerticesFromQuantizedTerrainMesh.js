@@ -1,7 +1,7 @@
 /**
- * Cesium - https://github.com/AnalyticalGraphicsInc/cesium
+ * Cesium - https://github.com/CesiumGS/cesium
  *
- * Copyright 2011-2014 Cesium Contributors
+ * Copyright 2011-2020 Cesium Contributors
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,3293 +18,993 @@
  * Columbus View (Pat. Pend.)
  *
  * Portions licensed separately.
- * See https://github.com/AnalyticalGraphicsInc/cesium/blob/master/LICENSE.md for full licensing details.
+ * See https://github.com/CesiumGS/cesium/blob/main/LICENSE.md for full licensing details.
  */
-(function () {
-/*global define*/
-define('Core/defined',[],function() {
-    "use strict";
 
-    /**
-     * Returns true if the object is defined, returns false otherwise.
-     *
-     * @exports defined
-     *
-     * @example
-     * if (Cesium.defined(positions)) {
-     *      doSomething();
-     * } else {
-     *      doSomethingElse();
-     * }
-     */
-    var defined = function(value) {
-        return value !== undefined;
-    };
-
-    return defined;
-});
-
-/*global define*/
-define('Core/freezeObject',['./defined'], function(defined) {
-    "use strict";
-
-    /**
-     * Freezes an object, using Object.freeze if available, otherwise returns
-     * the object unchanged.  This function should be used in setup code to prevent
-     * errors from completely halting JavaScript execution in legacy browsers.
-     *
-     * @private
-     *
-     * @exports freezeObject
-     */
-    var freezeObject = Object.freeze;
-    if (!defined(freezeObject)) {
-        freezeObject = function(o) {
-            return o;
-        };
-    }
-
-    return freezeObject;
-});
-/*global define*/
-define('Core/defaultValue',[
-        './freezeObject'
-    ], function(
-        freezeObject) {
-    "use strict";
-
-    /**
-     * Returns the first parameter if not undefined, otherwise the second parameter.
-     * Useful for setting a default value for a parameter.
-     *
-     * @exports defaultValue
-     *
-     * @example
-     * param = Cesium.defaultValue(param, 'default');
-     */
-    var defaultValue = function(a, b) {
-        if (a !== undefined) {
-            return a;
-        }
-        return b;
-    };
-
-    /**
-     * A frozen empty object that can be used as the default value for options passed as
-     * an object literal.
-     */
-    defaultValue.EMPTY_OBJECT = freezeObject({});
-
-    return defaultValue;
-});
-/*global define*/
-define('Core/DeveloperError',['./defined'], function(defined) {
-    "use strict";
-
-    /**
-     * Constructs an exception object that is thrown due to a developer error, e.g., invalid argument,
-     * argument out of range, etc.  This exception should only be thrown during development;
-     * it usually indicates a bug in the calling code.  This exception should never be
-     * caught; instead the calling code should strive not to generate it.
-     * <br /><br />
-     * On the other hand, a {@link RuntimeError} indicates an exception that may
-     * be thrown at runtime, e.g., out of memory, that the calling code should be prepared
-     * to catch.
-     *
-     * @alias DeveloperError
-     *
-     * @param {String} [message=undefined] The error message for this exception.
-     *
-     * @see RuntimeError
-     * @constructor
-     */
-    var DeveloperError = function(message) {
-        /**
-         * 'DeveloperError' indicating that this exception was thrown due to a developer error.
-         * @type {String}
-         * @constant
-         */
-        this.name = 'DeveloperError';
-
-        /**
-         * The explanation for why this exception was thrown.
-         * @type {String}
-         * @constant
-         */
-        this.message = message;
-
-        //Browsers such as IE don't have a stack property until you actually throw the error.
-        var stack;
-        try {
-            throw new Error();
-        } catch (e) {
-            stack = e.stack;
-        }
-
-        /**
-         * The stack trace of this exception, if available.
-         * @type {String}
-         * @constant
-         */
-        this.stack = stack;
-    };
-
-    DeveloperError.prototype.toString = function() {
-        var str = this.name + ': ' + this.message;
-
-        if (defined(this.stack)) {
-            str += '\n' + this.stack.toString();
-        }
-
-        return str;
-    };
-
-    /**
-     * @private
-     */
-    DeveloperError.throwInstantiationError = function() {
-        throw new DeveloperError('This function defines an interface and should not be called directly.');
-    };
-
-    return DeveloperError;
-});
-
-/*global define*/
-define('Core/Cartesian3',[
-        './defaultValue',
-        './defined',
-        './DeveloperError',
-        './freezeObject'
-    ], function(
-        defaultValue,
-        defined,
-        DeveloperError,
-        freezeObject) {
-    "use strict";
-
-    /**
-     * A 3D Cartesian point.
-     * @alias Cartesian3
-     * @constructor
-     *
-     * @param {Number} [x=0.0] The X component.
-     * @param {Number} [y=0.0] The Y component.
-     * @param {Number} [z=0.0] The Z component.
-     *
-     * @see Cartesian2
-     * @see Cartesian4
-     * @see Packable
-     */
-    var Cartesian3 = function(x, y, z) {
-        /**
-         * The X component.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.x = defaultValue(x, 0.0);
-
-        /**
-         * The Y component.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.y = defaultValue(y, 0.0);
-
-        /**
-         * The Z component.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.z = defaultValue(z, 0.0);
-    };
-
-    /**
-     * Converts the provided Spherical into Cartesian3 coordinates.
-     * @memberof Cartesian3
-     *
-     * @param {Spherical} spherical The Spherical to be converted to Cartesian3.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.fromSpherical = function(spherical, result) {
-                if (!defined(spherical)) {
-            throw new DeveloperError('spherical is required');
-        }
-        
-        if (!defined(result)) {
-            result = new Cartesian3();
-        }
-        var clock = spherical.clock;
-        var cone = spherical.cone;
-        var magnitude = defaultValue(spherical.magnitude, 1.0);
-        var radial = magnitude * Math.sin(cone);
-        result.x = radial * Math.cos(clock);
-        result.y = radial * Math.sin(clock);
-        result.z = magnitude * Math.cos(cone);
-        return result;
-    };
-
-    /**
-     * Creates a Cartesian3 instance from x, y and z coordinates.
-     * @memberof Cartesian3
-     *
-     * @param {Number} x The x coordinate.
-     * @param {Number} y The y coordinate.
-     * @param {Number} z The z coordinate.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.fromElements = function(x, y, z, result) {
-        if (!defined(result)) {
-            return new Cartesian3(x, y, z);
-        }
-
-        result.x = x;
-        result.y = y;
-        result.z = z;
-        return result;
-    };
-
-    /**
-     * Duplicates a Cartesian3 instance.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian to duplicate.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided. (Returns undefined if cartesian is undefined)
-     */
-    Cartesian3.clone = function(cartesian, result) {
-        if (!defined(cartesian)) {
-            return undefined;
-        }
-
-        if (!defined(result)) {
-            return new Cartesian3(cartesian.x, cartesian.y, cartesian.z);
-        }
-
-        result.x = cartesian.x;
-        result.y = cartesian.y;
-        result.z = cartesian.z;
-        return result;
-    };
-
-    /**
-     * Creates a Cartesian3 instance from an existing Cartesian4.  This simply takes the
-     * x, y, and z properties of the Cartesian4 and drops w.
-     * @function
-     *
-     * @param {Cartesian4} cartesian The Cartesian4 instance to create a Cartesian3 instance from.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.fromCartesian4 = Cartesian3.clone;
-
-    /**
-     * The number of elements used to pack the object into an array.
-     * @Type {Number}
-     */
-    Cartesian3.packedLength = 3;
-
-    /**
-     * Stores the provided instance into the provided array.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} value The value to pack.
-     * @param {Array} array The array to pack into.
-     * @param {Number} [startingIndex=0] The index into the array at which to start packing the elements.
-     */
-    Cartesian3.pack = function(value, array, startingIndex) {
-                if (!defined(value)) {
-            throw new DeveloperError('value is required');
-        }
-
-        if (!defined(array)) {
-            throw new DeveloperError('array is required');
-        }
-        
-        startingIndex = defaultValue(startingIndex, 0);
-
-        array[startingIndex++] = value.x;
-        array[startingIndex++] = value.y;
-        array[startingIndex] = value.z;
-    };
-
-    /**
-     * Retrieves an instance from a packed array.
-     * @memberof Cartesian3
-     *
-     * @param {Array} array The packed array.
-     * @param {Number} [startingIndex=0] The starting index of the element to be unpacked.
-     * @param {Cartesian3} [result] The object into which to store the result.
-     */
-    Cartesian3.unpack = function(array, startingIndex, result) {
-                if (!defined(array)) {
-            throw new DeveloperError('array is required');
-        }
-        
-        startingIndex = defaultValue(startingIndex, 0);
-
-        if (!defined(result)) {
-            result = new Cartesian3();
-        }
-        result.x = array[startingIndex++];
-        result.y = array[startingIndex++];
-        result.z = array[startingIndex];
-        return result;
-    };
-
-    /**
-     * Creates a Cartesian3 from three consecutive elements in an array.
-     * @memberof Cartesian3
-     *
-     * @param {Array} array The array whose three consecutive elements correspond to the x, y, and z components, respectively.
-     * @param {Number} [startingIndex=0] The offset into the array of the first element, which corresponds to the x component.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     *
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     *
-     * @example
-     * // Create a Cartesian3 with (1.0, 2.0, 3.0)
-     * var v = [1.0, 2.0, 3.0];
-     * var p = Cesium.Cartesian3.fromArray(v);
-     *
-     * // Create a Cartesian3 with (1.0, 2.0, 3.0) using an offset into an array
-     * var v2 = [0.0, 0.0, 1.0, 2.0, 3.0];
-     * var p2 = Cesium.Cartesian3.fromArray(v2, 2);
-     */
-    Cartesian3.fromArray = Cartesian3.unpack;
-
-    /**
-     * Computes the value of the maximum component for the supplied Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} The cartesian to use.
-     * @returns {Number} The value of the maximum component.
-     */
-    Cartesian3.getMaximumComponent = function(cartesian) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        return Math.max(cartesian.x, cartesian.y, cartesian.z);
-    };
-
-    /**
-     * Computes the value of the minimum component for the supplied Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} The cartesian to use.
-     * @returns {Number} The value of the minimum component.
-     */
-    Cartesian3.getMinimumComponent = function(cartesian) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        return Math.min(cartesian.x, cartesian.y, cartesian.z);
-    };
-
-    /**
-     * Compares two Cartesians and computes a Cartesian which contains the minimum components of the supplied Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} first A cartesian to compare.
-     * @param {Cartesian3} second A cartesian to compare.
-     * @param {Cartesian3} [result] The object into which to store the result.
-     * @returns {Cartesian3} A cartesian with the minimum components.
-     */
-    Cartesian3.getMinimumByComponent = function(first, second, result) {
-                if (!defined(first)) {
-            throw new DeveloperError('first is required.');
-        }
-        if (!defined(second)) {
-            throw new DeveloperError('second is required.');
-        }
-        
-        if (!defined(result)) {
-            result = new Cartesian3();
-        }
-
-        result.x = Math.min(first.x, second.x);
-        result.y = Math.min(first.y, second.y);
-        result.z = Math.min(first.z, second.z);
-
-        return result;
-    };
-
-    /**
-     * Compares two Cartesians and computes a Cartesian which contains the maximum components of the supplied Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} first A cartesian to compare.
-     * @param {Cartesian3} second A cartesian to compare.
-     * @param {Cartesian3} [result] The object into which to store the result.
-     * @returns {Cartesian3} A cartesian with the maximum components.
-     */
-    Cartesian3.getMaximumByComponent = function(first, second, result) {
-                if (!defined(first)) {
-            throw new DeveloperError('first is required.');
-        }
-        if (!defined(second)) {
-            throw new DeveloperError('second is required.');
-        }
-        
-        if (!defined(result)) {
-            result = new Cartesian3();
-        }
-
-        result.x = Math.max(first.x, second.x);
-        result.y = Math.max(first.y, second.y);
-        result.z = Math.max(first.z, second.z);
-        return result;
-    };
-
-    /**
-     * Computes the provided Cartesian's squared magnitude.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian instance whose squared magnitude is to be computed.
-     * @returns {Number} The squared magnitude.
-     */
-    Cartesian3.magnitudeSquared = function(cartesian) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        return cartesian.x * cartesian.x + cartesian.y * cartesian.y + cartesian.z * cartesian.z;
-    };
-
-    /**
-     * Computes the Cartesian's magnitude (length).
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian instance whose magnitude is to be computed.
-     * @returns {Number} The magnitude.
-     */
-    Cartesian3.magnitude = function(cartesian) {
-        return Math.sqrt(Cartesian3.magnitudeSquared(cartesian));
-    };
-
-    var distanceScratch = new Cartesian3();
-
-    /**
-     * Computes the distance between two points
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first point to compute the distance from.
-     * @param {Cartesian3} right The second point to compute the distance to.
-     *
-     * @returns {Number} The distance between two points.
-     *
-     * @example
-     * // Returns 1.0
-     * var d = Cesium.Cartesian3.distance(new Cesium.Cartesian3(1.0, 0.0, 0.0), new Cesium.Cartesian3(2.0, 0.0, 0.0));
-     */
-    Cartesian3.distance = function(left, right) {
-                if (!defined(left) || !defined(right)) {
-            throw new DeveloperError('left and right are required.');
-        }
-        
-        Cartesian3.subtract(left, right, distanceScratch);
-        return Cartesian3.magnitude(distanceScratch);
-    };
-
-    /**
-     * Computes the normalized form of the supplied Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian to be normalized.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.normalize = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        var magnitude = Cartesian3.magnitude(cartesian);
-        if (!defined(result)) {
-            return new Cartesian3(cartesian.x / magnitude, cartesian.y / magnitude, cartesian.z / magnitude);
-        }
-        result.x = cartesian.x / magnitude;
-        result.y = cartesian.y / magnitude;
-        result.z = cartesian.z / magnitude;
-        return result;
-    };
-
-    /**
-     * Computes the dot (scalar) product of two Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @returns {Number} The dot product.
-     */
-    Cartesian3.dot = function(left, right) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        return left.x * right.x + left.y * right.y + left.z * right.z;
-    };
-
-    /**
-     * Computes the componentwise product of two Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.multiplyComponents = function(left, right, result) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(left.x * right.x, left.y * right.y, left.z * right.z);
-        }
-        result.x = left.x * right.x;
-        result.y = left.y * right.y;
-        result.z = left.z * right.z;
-        return result;
-    };
-
-    /**
-     * Computes the componentwise sum of two Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.add = function(left, right, result) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(left.x + right.x, left.y + right.y, left.z + right.z);
-        }
-        result.x = left.x + right.x;
-        result.y = left.y + right.y;
-        result.z = left.z + right.z;
-        return result;
-    };
-
-    /**
-     * Computes the componentwise difference of two Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.subtract = function(left, right, result) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(left.x - right.x, left.y - right.y, left.z - right.z);
-        }
-        result.x = left.x - right.x;
-        result.y = left.y - right.y;
-        result.z = left.z - right.z;
-        return result;
-    };
-
-    /**
-     * Multiplies the provided Cartesian componentwise by the provided scalar.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian to be scaled.
-     * @param {Number} scalar The scalar to multiply with.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.multiplyByScalar = function(cartesian, scalar, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        if (typeof scalar !== 'number') {
-            throw new DeveloperError('scalar is required and must be a number.');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(cartesian.x * scalar, cartesian.y * scalar, cartesian.z * scalar);
-        }
-        result.x = cartesian.x * scalar;
-        result.y = cartesian.y * scalar;
-        result.z = cartesian.z * scalar;
-        return result;
-    };
-
-    /**
-     * Divides the provided Cartesian componentwise by the provided scalar.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian to be divided.
-     * @param {Number} scalar The scalar to divide by.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.divideByScalar = function(cartesian, scalar, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        if (typeof scalar !== 'number') {
-            throw new DeveloperError('scalar is required and must be a number.');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(cartesian.x / scalar, cartesian.y / scalar, cartesian.z / scalar);
-        }
-        result.x = cartesian.x / scalar;
-        result.y = cartesian.y / scalar;
-        result.z = cartesian.z / scalar;
-        return result;
-    };
-
-    /**
-     * Negates the provided Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian to be negated.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.negate = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(-cartesian.x, -cartesian.y, -cartesian.z);
-        }
-        result.x = -cartesian.x;
-        result.y = -cartesian.y;
-        result.z = -cartesian.z;
-        return result;
-    };
-
-    /**
-     * Computes the absolute value of the provided Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian whose absolute value is to be computed.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.abs = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required');
-        }
-        
-        if (!defined(result)) {
-            return new Cartesian3(Math.abs(cartesian.x), Math.abs(cartesian.y), Math.abs(cartesian.z));
-        }
-        result.x = Math.abs(cartesian.x);
-        result.y = Math.abs(cartesian.y);
-        result.z = Math.abs(cartesian.z);
-        return result;
-    };
-
-    var lerpScratch = new Cartesian3();
-    /**
-     * Computes the linear interpolation or extrapolation at t using the provided cartesians.
-     * @memberof Cartesian3
-     *
-     * @param start The value corresponding to t at 0.0.
-     * @param end The value corresponding to t at 1.0.
-     * @param t The point along t at which to interpolate.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.lerp = function(start, end, t, result) {
-                if (!defined(start)) {
-            throw new DeveloperError('start is required.');
-        }
-        if (!defined(end)) {
-            throw new DeveloperError('end is required.');
-        }
-        if (typeof t !== 'number') {
-            throw new DeveloperError('t is required and must be a number.');
-        }
-        
-        Cartesian3.multiplyByScalar(end, t, lerpScratch);
-        result = Cartesian3.multiplyByScalar(start, 1.0 - t, result);
-        return Cartesian3.add(lerpScratch, result, result);
-    };
-
-    var angleBetweenScratch = new Cartesian3();
-    var angleBetweenScratch2 = new Cartesian3();
-    /**
-     * Returns the angle, in radians, between the provided Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @returns {Number} The angle between the Cartesians.
-     */
-    Cartesian3.angleBetween = function(left, right) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        Cartesian3.normalize(left, angleBetweenScratch);
-        Cartesian3.normalize(right, angleBetweenScratch2);
-        var cosine = Cartesian3.dot(angleBetweenScratch, angleBetweenScratch2);
-        var sine = Cartesian3.magnitude(Cartesian3.cross(angleBetweenScratch, angleBetweenScratch2, angleBetweenScratch));
-        return Math.atan2(sine, cosine);
-    };
-
-    var mostOrthogonalAxisScratch = new Cartesian3();
-    /**
-     * Returns the axis that is most orthogonal to the provided Cartesian.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} cartesian The Cartesian on which to find the most orthogonal axis.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The most orthogonal axis.
-     */
-    Cartesian3.mostOrthogonalAxis = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required.');
-        }
-        
-        var f = Cartesian3.normalize(cartesian, mostOrthogonalAxisScratch);
-        Cartesian3.abs(f, f);
-
-        if (f.x <= f.y) {
-            if (f.x <= f.z) {
-                result = Cartesian3.clone(Cartesian3.UNIT_X, result);
-            } else {
-                result = Cartesian3.clone(Cartesian3.UNIT_Z, result);
-            }
-        } else {
-            if (f.y <= f.z) {
-                result = Cartesian3.clone(Cartesian3.UNIT_Y, result);
-            } else {
-                result = Cartesian3.clone(Cartesian3.UNIT_Z, result);
-            }
-        }
-
-        return result;
-    };
-
-    /**
-     * Compares the provided Cartesians componentwise and returns
-     * <code>true</code> if they are equal, <code>false</code> otherwise.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} [left] The first Cartesian.
-     * @param {Cartesian3} [right] The second Cartesian.
-     * @returns {Boolean} <code>true</code> if left and right are equal, <code>false</code> otherwise.
-     */
-    Cartesian3.equals = function(left, right) {
-            return (left === right) ||
-              ((defined(left)) &&
-               (defined(right)) &&
-               (left.x === right.x) &&
-               (left.y === right.y) &&
-               (left.z === right.z));
-    };
-
-    /**
-     * Compares the provided Cartesians componentwise and returns
-     * <code>true</code> if they are within the provided epsilon,
-     * <code>false</code> otherwise.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} [left] The first Cartesian.
-     * @param {Cartesian3} [right] The second Cartesian.
-     * @param {Number} epsilon The epsilon to use for equality testing.
-     * @returns {Boolean} <code>true</code> if left and right are within the provided epsilon, <code>false</code> otherwise.
-     */
-    Cartesian3.equalsEpsilon = function(left, right, epsilon) {
-                if (typeof epsilon !== 'number') {
-            throw new DeveloperError('epsilon is required and must be a number.');
-        }
-        
-        return (left === right) ||
-               ((defined(left)) &&
-                (defined(right)) &&
-                (Math.abs(left.x - right.x) <= epsilon) &&
-                (Math.abs(left.y - right.y) <= epsilon) &&
-                (Math.abs(left.z - right.z) <= epsilon));
-    };
-
-    /**
-     * Computes the cross (outer) product of two Cartesians.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} left The first Cartesian.
-     * @param {Cartesian3} right The second Cartesian.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The cross product.
-     */
-    Cartesian3.cross = function(left, right, result) {
-                if (!defined(left)) {
-            throw new DeveloperError('left is required');
-        }
-        if (!defined(right)) {
-            throw new DeveloperError('right is required');
-        }
-        
-        var leftX = left.x;
-        var leftY = left.y;
-        var leftZ = left.z;
-        var rightX = right.x;
-        var rightY = right.y;
-        var rightZ = right.z;
-
-        var x = leftY * rightZ - leftZ * rightY;
-        var y = leftZ * rightX - leftX * rightZ;
-        var z = leftX * rightY - leftY * rightX;
-
-        if (!defined(result)) {
-            return new Cartesian3(x, y, z);
-        }
-        result.x = x;
-        result.y = y;
-        result.z = z;
-        return result;
-    };
-
-    /**
-     * An immutable Cartesian3 instance initialized to (0.0, 0.0, 0.0).
-     * @memberof Cartesian3
-     */
-    Cartesian3.ZERO = freezeObject(new Cartesian3(0.0, 0.0, 0.0));
-
-    /**
-     * An immutable Cartesian3 instance initialized to (1.0, 0.0, 0.0).
-     * @memberof Cartesian3
-     */
-    Cartesian3.UNIT_X = freezeObject(new Cartesian3(1.0, 0.0, 0.0));
-
-    /**
-     * An immutable Cartesian3 instance initialized to (0.0, 1.0, 0.0).
-     * @memberof Cartesian3
-     */
-    Cartesian3.UNIT_Y = freezeObject(new Cartesian3(0.0, 1.0, 0.0));
-
-    /**
-     * An immutable Cartesian3 instance initialized to (0.0, 0.0, 1.0).
-     * @memberof Cartesian3
-     */
-    Cartesian3.UNIT_Z = freezeObject(new Cartesian3(0.0, 0.0, 1.0));
-
-    /**
-     * Duplicates this Cartesian3 instance.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if one was not provided.
-     */
-    Cartesian3.prototype.clone = function(result) {
-        return Cartesian3.clone(this, result);
-    };
-
-    /**
-     * Compares this Cartesian against the provided Cartesian componentwise and returns
-     * <code>true</code> if they are equal, <code>false</code> otherwise.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} [right] The right hand side Cartesian.
-     * @returns {Boolean} <code>true</code> if they are equal, <code>false</code> otherwise.
-     */
-    Cartesian3.prototype.equals = function(right) {
-        return Cartesian3.equals(this, right);
-    };
-
-    /**
-     * Compares this Cartesian against the provided Cartesian componentwise and returns
-     * <code>true</code> if they are within the provided epsilon,
-     * <code>false</code> otherwise.
-     * @memberof Cartesian3
-     *
-     * @param {Cartesian3} [right] The right hand side Cartesian.
-     * @param {Number} epsilon The epsilon to use for equality testing.
-     * @returns {Boolean} <code>true</code> if they are within the provided epsilon, <code>false</code> otherwise.
-     */
-    Cartesian3.prototype.equalsEpsilon = function(right, epsilon) {
-        return Cartesian3.equalsEpsilon(this, right, epsilon);
-    };
-
-    /**
-     * Creates a string representing this Cartesian in the format '(x, y, z)'.
-     * @memberof Cartesian3
-     *
-     * @returns {String} A string representing this Cartesian in the format '(x, y, z)'.
-     */
-    Cartesian3.prototype.toString = function() {
-        return '(' + this.x + ', ' + this.y + ', ' + this.z + ')';
-    };
-
-    return Cartesian3;
-});
-
-/*
-  I've wrapped Makoto Matsumoto and Takuji Nishimura's code in a namespace
-  so it's better encapsulated. Now you can have multiple random number generators
-  and they won't stomp all over eachother's state.
-
-  If you want to use this as a substitute for Math.random(), use the random()
-  method like so:
-
-  var m = new MersenneTwister();
-  var randomNumber = m.random();
-
-  You can also call the other genrand_{foo}() methods on the instance.
-
-  If you want to use a specific seed in order to get a repeatable random
-  sequence, pass an integer into the constructor:
-
-  var m = new MersenneTwister(123);
-
-  and that will always produce the same random sequence.
-
-  Sean McCullough (banksean@gmail.com)
-*/
-
-/*
-   A C-program for MT19937, with initialization improved 2002/1/26.
-   Coded by Takuji Nishimura and Makoto Matsumoto.
-
-   Before using, initialize the state by using init_genrand(seed)
-   or init_by_array(init_key, key_length).
-*/
-/**
-@license
-mersenne-twister.js - https://gist.github.com/banksean/300494
-
-   Copyright (C) 1997 - 2002, Makoto Matsumoto and Takuji Nishimura,
-   All rights reserved.
-
-   Redistribution and use in source and binary forms, with or without
-   modification, are permitted provided that the following conditions
-   are met:
-
-     1. Redistributions of source code must retain the above copyright
-        notice, this list of conditions and the following disclaimer.
-
-     2. Redistributions in binary form must reproduce the above copyright
-        notice, this list of conditions and the following disclaimer in the
-        documentation and/or other materials provided with the distribution.
-
-     3. The names of its contributors may not be used to endorse or promote
-        products derived from this software without specific prior written
-        permission.
-
-   THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-   "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-   LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-   A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE COPYRIGHT OWNER OR
-   CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
-   EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
-   PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
-   PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
-   LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
-   NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-   SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-*/
-/*
-   Any feedback is very welcome.
-   http://www.math.sci.hiroshima-u.ac.jp/~m-mat/MT/emt.html
-   email: m-mat @ math.sci.hiroshima-u.ac.jp (remove space)
-*/
-define('ThirdParty/mersenne-twister',[],function() {
-var MersenneTwister = function(seed) {
-  if (seed == undefined) {
-    seed = new Date().getTime();
-  }
-  /* Period parameters */
-  this.N = 624;
-  this.M = 397;
-  this.MATRIX_A = 0x9908b0df;   /* constant vector a */
-  this.UPPER_MASK = 0x80000000; /* most significant w-r bits */
-  this.LOWER_MASK = 0x7fffffff; /* least significant r bits */
-
-  this.mt = new Array(this.N); /* the array for the state vector */
-  this.mti=this.N+1; /* mti==N+1 means mt[N] is not initialized */
-
-  this.init_genrand(seed);
-}
-
-/* initializes mt[N] with a seed */
-MersenneTwister.prototype.init_genrand = function(s) {
-  this.mt[0] = s >>> 0;
-  for (this.mti=1; this.mti<this.N; this.mti++) {
-      var s = this.mt[this.mti-1] ^ (this.mt[this.mti-1] >>> 30);
-   this.mt[this.mti] = (((((s & 0xffff0000) >>> 16) * 1812433253) << 16) + (s & 0x0000ffff) * 1812433253)
-  + this.mti;
-      /* See Knuth TAOCP Vol2. 3rd Ed. P.106 for multiplier. */
-      /* In the previous versions, MSBs of the seed affect   */
-      /* only MSBs of the array mt[].                        */
-      /* 2002/01/09 modified by Makoto Matsumoto             */
-      this.mt[this.mti] >>>= 0;
-      /* for >32 bit machines */
-  }
-}
-
-/* initialize by an array with array-length */
-/* init_key is the array for initializing keys */
-/* key_length is its length */
-/* slight change for C++, 2004/2/26 */
-//MersenneTwister.prototype.init_by_array = function(init_key, key_length) {
-//  var i, j, k;
-//  this.init_genrand(19650218);
-//  i=1; j=0;
-//  k = (this.N>key_length ? this.N : key_length);
-//  for (; k; k--) {
-//    var s = this.mt[i-1] ^ (this.mt[i-1] >>> 30)
-//    this.mt[i] = (this.mt[i] ^ (((((s & 0xffff0000) >>> 16) * 1664525) << 16) + ((s & 0x0000ffff) * 1664525)))
-//      + init_key[j] + j; /* non linear */
-//    this.mt[i] >>>= 0; /* for WORDSIZE > 32 machines */
-//    i++; j++;
-//    if (i>=this.N) { this.mt[0] = this.mt[this.N-1]; i=1; }
-//    if (j>=key_length) j=0;
-//  }
-//  for (k=this.N-1; k; k--) {
-//    var s = this.mt[i-1] ^ (this.mt[i-1] >>> 30);
-//    this.mt[i] = (this.mt[i] ^ (((((s & 0xffff0000) >>> 16) * 1566083941) << 16) + (s & 0x0000ffff) * 1566083941))
-//      - i; /* non linear */
-//    this.mt[i] >>>= 0; /* for WORDSIZE > 32 machines */
-//    i++;
-//    if (i>=this.N) { this.mt[0] = this.mt[this.N-1]; i=1; }
-//  }
-//
-//  this.mt[0] = 0x80000000; /* MSB is 1; assuring non-zero initial array */
-//}
-
-/* generates a random number on [0,0xffffffff]-interval */
-MersenneTwister.prototype.genrand_int32 = function() {
-  var y;
-  var mag01 = new Array(0x0, this.MATRIX_A);
-  /* mag01[x] = x * MATRIX_A  for x=0,1 */
-
-  if (this.mti >= this.N) { /* generate N words at one time */
-    var kk;
-
-    if (this.mti == this.N+1)   /* if init_genrand() has not been called, */
-      this.init_genrand(5489); /* a default initial seed is used */
-
-    for (kk=0;kk<this.N-this.M;kk++) {
-      y = (this.mt[kk]&this.UPPER_MASK)|(this.mt[kk+1]&this.LOWER_MASK);
-      this.mt[kk] = this.mt[kk+this.M] ^ (y >>> 1) ^ mag01[y & 0x1];
-    }
-    for (;kk<this.N-1;kk++) {
-      y = (this.mt[kk]&this.UPPER_MASK)|(this.mt[kk+1]&this.LOWER_MASK);
-      this.mt[kk] = this.mt[kk+(this.M-this.N)] ^ (y >>> 1) ^ mag01[y & 0x1];
-    }
-    y = (this.mt[this.N-1]&this.UPPER_MASK)|(this.mt[0]&this.LOWER_MASK);
-    this.mt[this.N-1] = this.mt[this.M-1] ^ (y >>> 1) ^ mag01[y & 0x1];
-
-    this.mti = 0;
+define(['./AxisAlignedBoundingBox-52bc7e5b', './Matrix2-c430e55a', './defaultValue-81eec7ed', './TerrainEncoding-7b2c3643', './IndexDatatype-bed3935d', './ComponentDatatype-9e86ac8f', './RuntimeError-8952249c', './Transforms-4ee811db', './WebMercatorProjection-04357f64', './createTaskProcessorWorker', './AttributeCompression-046b70bd', './WebGLConstants-508b9636', './_commonjsHelpers-3aae1032-26891ab7', './combine-3c023bda'], (function (AxisAlignedBoundingBox, Matrix2, defaultValue, TerrainEncoding, IndexDatatype, ComponentDatatype, RuntimeError, Transforms, WebMercatorProjection, createTaskProcessorWorker, AttributeCompression, WebGLConstants, _commonjsHelpers3aae1032, combine) { 'use strict';
+
+  /**
+   * Provides terrain or other geometry for the surface of an ellipsoid.  The surface geometry is
+   * organized into a pyramid of tiles according to a {@link TilingScheme}.  This type describes an
+   * interface and is not intended to be instantiated directly.
+   *
+   * @alias TerrainProvider
+   * @constructor
+   *
+   * @see EllipsoidTerrainProvider
+   * @see CesiumTerrainProvider
+   * @see VRTheWorldTerrainProvider
+   * @see GoogleEarthEnterpriseTerrainProvider
+   */
+  function TerrainProvider() {
+    RuntimeError.DeveloperError.throwInstantiationError();
   }
 
-  y = this.mt[this.mti++];
-
-  /* Tempering */
-  y ^= (y >>> 11);
-  y ^= (y << 7) & 0x9d2c5680;
-  y ^= (y << 15) & 0xefc60000;
-  y ^= (y >>> 18);
-
-  return y >>> 0;
-}
-
-/* generates a random number on [0,0x7fffffff]-interval */
-//MersenneTwister.prototype.genrand_int31 = function() {
-//  return (this.genrand_int32()>>>1);
-//}
-
-/* generates a random number on [0,1]-real-interval */
-//MersenneTwister.prototype.genrand_real1 = function() {
-//  return this.genrand_int32()*(1.0/4294967295.0);
-//  /* divided by 2^32-1 */
-//}
-
-/* generates a random number on [0,1)-real-interval */
-MersenneTwister.prototype.random = function() {
-  return this.genrand_int32()*(1.0/4294967296.0);
-  /* divided by 2^32 */
-}
-
-/* generates a random number on (0,1)-real-interval */
-//MersenneTwister.prototype.genrand_real3 = function() {
-//  return (this.genrand_int32() + 0.5)*(1.0/4294967296.0);
-//  /* divided by 2^32 */
-//}
-
-/* generates a random number on [0,1) with 53-bit resolution*/
-//MersenneTwister.prototype.genrand_res53 = function() {
-//  var a=this.genrand_int32()>>>5, b=this.genrand_int32()>>>6;
-//  return(a*67108864.0+b)*(1.0/9007199254740992.0);
-//}
-
-/* These real versions are due to Isaku Wada, 2002/01/09 added */
-
-return MersenneTwister;
-});
-/*global define*/
-define('Core/Math',[
-        './defaultValue',
-        './defined',
-        './DeveloperError',
-        '../ThirdParty/mersenne-twister'
-       ], function(
-         defaultValue,
-         defined,
-         DeveloperError,
-         MersenneTwister) {
-    "use strict";
-
-    /**
-     * Math functions.
-     * @exports CesiumMath
-     */
-    var CesiumMath = {};
-
-    /**
-     * 0.1
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON1 = 0.1;
-
-    /**
-     * 0.01
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON2 = 0.01;
-
-    /**
-     * 0.001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON3 = 0.001;
-
-    /**
-     * 0.0001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON4 = 0.0001;
-
-    /**
-     * 0.00001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON5 = 0.00001;
-
-    /**
-     * 0.000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON6 = 0.000001;
-
-    /**
-     * 0.0000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON7 = 0.0000001;
-
-    /**
-     * 0.00000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON8 = 0.00000001;
-
-    /**
-     * 0.000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON9 = 0.000000001;
-
-    /**
-     * 0.0000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON10 = 0.0000000001;
-
-    /**
-     * 0.00000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON11 = 0.00000000001;
-
-    /**
-     * 0.000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON12 = 0.000000000001;
-
-    /**
-     * 0.0000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON13 = 0.0000000000001;
-
-    /**
-     * 0.00000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON14 = 0.00000000000001;
-
-    /**
-     * 0.000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON15 = 0.000000000000001;
-
-    /**
-     * 0.0000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON16 = 0.0000000000000001;
-
-    /**
-     * 0.00000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON17 = 0.00000000000000001;
-
-    /**
-     * 0.000000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON18 = 0.000000000000000001;
-
-    /**
-     * 0.0000000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON19 = 0.0000000000000000001;
-
-    /**
-     * 0.00000000000000000001
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.EPSILON20 = 0.00000000000000000001;
-
-    /**
-     * 3.986004418e14
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.GRAVITATIONALPARAMETER = 3.986004418e14;
-
-    /**
-     * Radius of the sun in meters: 6.955e8
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.SOLAR_RADIUS = 6.955e8;
-
-    /**
-     * The mean radius of the moon, according to the "Report of the IAU/IAG Working Group on
-     * Cartographic Coordinates and Rotational Elements of the Planets and satellites: 2000",
-     * Celestial Mechanics 82: 83-110, 2002.
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.LUNAR_RADIUS = 1737400.0;
-
-    /**
-     * 64 * 1024
-     * @type {Number}
-     * @constant
-     */
-    CesiumMath.SIXTY_FOUR_KILOBYTES = 64 * 1024;
-
-    /**
-     * Returns the sign of the value; 1 if the value is positive, -1 if the value is
-     * negative, or 0 if the value is 0.
-     *
-     * @param {Number} value The value to return the sign of.
-     *
-     * @returns {Number} The sign of value.
-     */
-    CesiumMath.sign = function(value) {
-        if (value > 0) {
-            return 1;
-        }
-        if (value < 0) {
-            return -1;
-        }
-
-        return 0;
-    };
-
-    /**
-     * Returns the hyperbolic sine of a {@code Number}.
-     * The hyperbolic sine of <em>value</em> is defined to be
-     * (<em>e<sup>x</sup>&nbsp;-&nbsp;e<sup>-x</sup></em>)/2.0
-     * where <i>e</i> is Euler's number, approximately 2.71828183.
-     *
-     * <p>Special cases:
-     *   <ul>
-     *     <li>If the argument is NaN, then the result is NaN.</li>
-     *
-     *     <li>If the argument is infinite, then the result is an infinity
-     *     with the same sign as the argument.</li>
-     *
-     *     <li>If the argument is zero, then the result is a zero with the
-     *     same sign as the argument.</li>
-     *   </ul>
-     *</p>
-     *
-     * @param value The number whose hyperbolic sine is to be returned.
-     *
-     * @returns The hyperbolic sine of {@code value}.
-     */
-    CesiumMath.sinh = function(value) {
-        var part1 = Math.pow(Math.E, value);
-        var part2 = Math.pow(Math.E, -1.0 * value);
-
-        return (part1 - part2) * 0.5;
-    };
-
-    /**
-     * Returns the hyperbolic cosine of a {@code Number}.
-     * The hyperbolic cosine of <strong>value</strong> is defined to be
-     * (<em>e<sup>x</sup>&nbsp;+&nbsp;e<sup>-x</sup></em>)/2.0
-     * where <i>e</i> is Euler's number, approximately 2.71828183.
-     *
-     * <p>Special cases:
-     *   <ul>
-     *     <li>If the argument is NaN, then the result is NaN.</li>
-     *
-     *     <li>If the argument is infinite, then the result is positive infinity.</li>
-     *
-     *     <li>If the argument is zero, then the result is {@code 1.0}.</li>
-     *   </ul>
-     *</p>
-     *
-     * @param value The number whose hyperbolic cosine is to be returned.
-     *
-     * @returns The hyperbolic cosine of {@code value}.
-     */
-    CesiumMath.cosh = function(value) {
-        var part1 = Math.pow(Math.E, value);
-        var part2 = Math.pow(Math.E, -1.0 * value);
-
-        return (part1 + part2) * 0.5;
-    };
-
-    /**
-     * DOC_TBA
-     */
-    CesiumMath.lerp = function(p, q, time) {
-        return ((1.0 - time) * p) + (time * q);
-    };
-
-    /**
-     * pi
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_pi
-     */
-    CesiumMath.PI = Math.PI;
-
-    /**
-     * 1/pi
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_oneOverPi
-     */
-    CesiumMath.ONE_OVER_PI = 1.0 / Math.PI;
-
-    /**
-     * pi/2
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_piOverTwo
-     */
-    CesiumMath.PI_OVER_TWO = Math.PI * 0.5;
-
-    /**
-     * pi/3
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_piOverThree
-     */
-    CesiumMath.PI_OVER_THREE = Math.PI / 3.0;
-
-    /**
-     * pi/4
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_piOverFour
-     */
-    CesiumMath.PI_OVER_FOUR = Math.PI / 4.0;
-
-    /**
-     * pi/6
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_piOverSix
-     */
-    CesiumMath.PI_OVER_SIX = Math.PI / 6.0;
-
-    /**
-     * 3pi/2
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_threePiOver2
-     */
-    CesiumMath.THREE_PI_OVER_TWO = (3.0 * Math.PI) * 0.5;
-
-    /**
-     * 2pi
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_twoPi
-     */
-    CesiumMath.TWO_PI = 2.0 * Math.PI;
-
-    /**
-     * 1/2pi
-     *
-     * @type {Number}
-     * @constant
-     * @see czm_oneOverTwoPi
-     */
-    CesiumMath.ONE_OVER_TWO_PI = 1.0 / (2.0 * Math.PI);
-
-    /**
-     * The number of radians in a degree.
-     *
-     * @type {Number}
-     * @constant
-     * @default Math.PI / 180.0
-     * @see czm_radiansPerDegree
-     */
-    CesiumMath.RADIANS_PER_DEGREE = Math.PI / 180.0;
-
-    /**
-     * The number of degrees in a radian.
-     *
-     * @type {Number}
-     * @constant
-     * @default 180.0 / Math.PI
-     * @see czm_degreesPerRadian
-     */
-    CesiumMath.DEGREES_PER_RADIAN = 180.0 / Math.PI;
-
-    /**
-     * The number of radians in an arc second.
-     *
-     * @type {Number}
-     * @constant
-     * @default {@link CesiumMath.RADIANS_PER_DEGREE} / 3600.0
-     * @see czm_radiansPerArcSecond
-     */
-    CesiumMath.RADIANS_PER_ARCSECOND = CesiumMath.RADIANS_PER_DEGREE / 3600.0;
-
-    /**
-     * Converts degrees to radians.
-     * @param {Number} degrees The angle to convert in degrees.
-     * @returns {Number} The corresponding angle in radians.
-     */
-    CesiumMath.toRadians = function(degrees) {
-        return degrees * CesiumMath.RADIANS_PER_DEGREE;
-    };
-
-    /**
-     * Converts radians to degrees.
-     * @param {Number} radians The angle to convert in radians.
-     * @returns {Number} The corresponding angle in degrees.
-     */
-    CesiumMath.toDegrees = function(radians) {
-        return radians * CesiumMath.DEGREES_PER_RADIAN;
-    };
-
-    /**
-     * Converts a longitude value, in radians, to the range [<code>-Math.PI</code>, <code>Math.PI</code>).
-     *
-     * @param {Number} angle The longitude value, in radians, to convert to the range [<code>-Math.PI</code>, <code>Math.PI</code>).
-     *
-     * @returns {Number} The equivalent longitude value in the range [<code>-Math.PI</code>, <code>Math.PI</code>).
-     *
-     * @example
-     * // Convert 270 degrees to -90 degrees longitude
-     * var longitude = Cesium.Math.convertLongitudeRange(Cesium.Math.toRadians(270.0));
-     */
-    CesiumMath.convertLongitudeRange = function(angle) {
-        var twoPi = CesiumMath.TWO_PI;
-
-        var simplified = angle - Math.floor(angle / twoPi) * twoPi;
-
-        if (simplified < -Math.PI) {
-            return simplified + twoPi;
-        }
-        if (simplified >= Math.PI) {
-            return simplified - twoPi;
-        }
-
-        return simplified;
-    };
-
-    /**
-     * Produces an angle in the range 0 <= angle <= 2Pi which is equivalent to the provided angle.
-     * @param {Number} angle in radians
-     * @returns {Number} The angle in the range ()<code>-CesiumMath.PI</code>, <code>CesiumMath.PI</code>).
-     */
-    CesiumMath.negativePiToPi = function(x) {
-        var epsilon10 = CesiumMath.EPSILON10;
-        var pi = CesiumMath.PI;
-        var two_pi = CesiumMath.TWO_PI;
-        while (x < -(pi + epsilon10)) {
-            x += two_pi;
-        }
-        if (x < -pi) {
-            return -pi;
-        }
-        while (x > pi + epsilon10) {
-            x -= two_pi;
-        }
-        return x > pi ? pi : x;
-    };
-
-    /**
-     * Produces an angle in the range -Pi <= angle <= Pi which is equivalent to the provided angle.
-     * @param {Number} angle in radians
-     * @returns {Number} The angle in the range (0 , <code>CesiumMath.TWO_PI</code>).
-     */
-    CesiumMath.zeroToTwoPi = function(x) {
-        var value = x % CesiumMath.TWO_PI;
-        // We do a second modules here if we add 2Pi to ensure that we don't have any numerical issues with very
-        // small negative values.
-        return (value < 0.0) ? (value + CesiumMath.TWO_PI) % CesiumMath.TWO_PI : value;
-    };
-
-    /**
-     * DOC_TBA
-     */
-    CesiumMath.equalsEpsilon = function(left, right, epsilon) {
-        epsilon = defaultValue(epsilon, 0.0);
-        return Math.abs(left - right) <= epsilon;
-    };
-
-    var factorials = [1];
-
-    /**
-     * Computes the factorial of the provided number.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} n The number whose factorial is to be computed.
-     *
-     * @returns {Number} The factorial of the provided number or undefined if the number is less than 0.
-     *
-     * @see <a href='http://en.wikipedia.org/wiki/Factorial'>Factorial on Wikipedia</a>.
-     *
-     * @example
-     * //Compute 7!, which is equal to 5040
-     * var computedFactorial = Cesium.Math.factorial(7);
-     *
-     * @exception {DeveloperError} A number greater than or equal to 0 is required.
-     */
-    CesiumMath.factorial = function(n) {
-                if (typeof n !== 'number' || n < 0) {
-            throw new DeveloperError('A number greater than or equal to 0 is required.');
-        }
-        
-        var length = factorials.length;
-        if (n >= length) {
-            var sum = factorials[length - 1];
-            for ( var i = length; i <= n; i++) {
-                factorials.push(sum * i);
-            }
-        }
-        return factorials[n];
-    };
-
-    /**
-     * Increments a number with a wrapping to a minimum value if the number exceeds the maximum value.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} [n] The number to be incremented.
-     * @param {Number} [maximumValue] The maximum incremented value before rolling over to the minimum value.
-     * @param {Number} [minimumValue=0.0] The number reset to after the maximum value has been exceeded.
-     *
-     * @returns {Number} The incremented number.
-     *
-     * @example
-     * var n = Cesium.Math.incrementWrap(5, 10, 0); // returns 6
-     * var n = Cesium.Math.incrementWrap(10, 10, 0); // returns 0
-     *
-     * @exception {DeveloperError} Maximum value must be greater than minimum value.
-     */
-    CesiumMath.incrementWrap = function(n, maximumValue, minimumValue) {
-        minimumValue = defaultValue(minimumValue, 0.0);
-
-                if (maximumValue <= minimumValue) {
-            throw new DeveloperError('Maximum value must be greater than minimum value.');
-        }
-        
-        ++n;
-        if (n > maximumValue) {
-            n = minimumValue;
-        }
-        return n;
-    };
-
-    /**
-     * Determines if a positive integer is a power of two.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} n The positive integer to test.
-     *
-     * @returns {Boolean} <code>true</code> if the number if a power of two; otherwise, <code>false</code>.
-     *
-     * @exception {DeveloperError} A number greater than or equal to 0 is required.
-     *
-     * @example
-     * var t = Cesium.Math.isPowerOfTwo(16); // true
-     * var f = Cesium.Math.isPowerOfTwo(20); // false
-     */
-    CesiumMath.isPowerOfTwo = function(n) {
-                if (typeof n !== 'number' || n < 0) {
-            throw new DeveloperError('A number greater than or equal to 0 is required.');
-        }
-        
-        return (n !== 0) && ((n & (n - 1)) === 0);
-    };
-
-    /**
-     * Computes the next power-of-two integer greater than or equal to the provided positive integer.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} n The positive integer to test.
-     *
-     * @returns {Number} The next power-of-two integer.
-     *
-     * @exception {DeveloperError} A number greater than or equal to 0 is required.
-     *
-     * @example
-     * var n = Cesium.Math.nextPowerOfTwo(29); // 32
-     * var m = Cesium.Math.nextPowerOfTwo(32); // 32
-     */
-    CesiumMath.nextPowerOfTwo = function(n) {
-                if (typeof n !== 'number' || n < 0) {
-            throw new DeveloperError('A number greater than or equal to 0 is required.');
-        }
-        
-        // From http://graphics.stanford.edu/~seander/bithacks.html#RoundUpPowerOf2
-        --n;
-        n |= n >> 1;
-        n |= n >> 2;
-        n |= n >> 4;
-        n |= n >> 8;
-        n |= n >> 16;
-        ++n;
-
-        return n;
-    };
-
-    /**
-     * Constraint a value to lie between two values.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} value The value to constrain.
-     * @param {Number} min The minimum value.
-     * @param {Number} max The maximum value.
-     * @returns The value clamped so that min <= value <= max.
-     */
-    CesiumMath.clamp = function(value, min, max) {
-        return value < min ? min : value > max ? max : value;
-    };
-
-    var randomNumberGenerator = new MersenneTwister();
-
-    /**
-     * Sets the seed used by the random number generator
-     * in {@link CesiumMath#nextRandomNumber}.
-     *
-     * @memberof CesiumMath
-     *
-     * @param {Number} seed An integer used as the seed.
-     */
-    CesiumMath.setRandomNumberSeed = function(seed) {
-                if (!defined(seed)) {
-            throw new DeveloperError('seed is required.');
-        }
-        
-        randomNumberGenerator = new MersenneTwister(seed);
-    };
-
-    /**
-     * Generates a random number in the range of [0.0, 1.0)
-     * using a Mersenne twister.
-     *
-     * @memberof CesiumMath
-     *
-     * @returns A random number in the range of [0.0, 1.0).
-     *
-     * @see CesiumMath#setRandomNumberSeed
-     * @see http://en.wikipedia.org/wiki/Mersenne_twister
-     */
-    CesiumMath.nextRandomNumber = function() {
-        return randomNumberGenerator.random();
-    };
-
-    return CesiumMath;
-});
-
-/*global define*/
-define('Core/Cartographic',[
-        './defaultValue',
-        './defined',
-        './DeveloperError',
-        './freezeObject',
-        './Math'
-    ], function(
-        defaultValue,
-        defined,
-        DeveloperError,
-        freezeObject,
-        CesiumMath) {
-    "use strict";
-
-    /**
-     * A position defined by longitude, latitude, and height.
-     * @alias Cartographic
-     * @constructor
-     *
-     * @param {Number} [longitude=0.0] The longitude, in radians.
-     * @param {Number} [latitude=0.0] The latitude, in radians.
-     * @param {Number} [height=0.0] The height, in meters, above the ellipsoid.
-     *
-     * @see Ellipsoid
-     */
-    var Cartographic = function(longitude, latitude, height) {
-        /**
-         * The longitude, in radians.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.longitude = defaultValue(longitude, 0.0);
-
-        /**
-         * The latitude, in radians.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.latitude = defaultValue(latitude, 0.0);
-
-        /**
-         * The height, in meters, above the ellipsoid.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.height = defaultValue(height, 0.0);
-    };
-
-    /**
-     * Creates a new Cartographic instance from longitude and latitude
-     * specified in degrees.  The values in the resulting object will
-     * be in radians.
-     * @memberof Cartographic
-     *
-     * @param {Number} [longitude=0.0] The longitude, in degrees.
-     * @param {Number} [latitude=0.0] The latitude, in degrees.
-     * @param {Number} [height=0.0] The height, in meters, above the ellipsoid.
-     * @param {Cartographic} [result] The object onto which to store the result.
-     * @returns {Cartographic} The modified result parameter or a new Cartographic instance if one was not provided.
-     */
-    Cartographic.fromDegrees = function(longitude, latitude, height, result) {
-        longitude = CesiumMath.toRadians(defaultValue(longitude, 0.0));
-        latitude = CesiumMath.toRadians(defaultValue(latitude, 0.0));
-        height = defaultValue(height, 0.0);
-
-        if (!defined(result)) {
-            return new Cartographic(longitude, latitude, height);
-        }
-
-        result.longitude = longitude;
-        result.latitude = latitude;
-        result.height = height;
-        return result;
-    };
-
-    /**
-     * Duplicates a Cartographic instance.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} cartographic The cartographic to duplicate.
-     * @param {Cartographic} [result] The object onto which to store the result.
-     * @returns {Cartographic} The modified result parameter or a new Cartographic instance if one was not provided. (Returns undefined if cartographic is undefined)
-     */
-    Cartographic.clone = function(cartographic, result) {
-        if (!defined(cartographic)) {
-            return undefined;
-        }
-        if (!defined(result)) {
-            return new Cartographic(cartographic.longitude, cartographic.latitude, cartographic.height);
-        }
-        result.longitude = cartographic.longitude;
-        result.latitude = cartographic.latitude;
-        result.height = cartographic.height;
-        return result;
-    };
-
-    /**
-     * Compares the provided cartographics componentwise and returns
-     * <code>true</code> if they are equal, <code>false</code> otherwise.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} [left] The first cartographic.
-     * @param {Cartographic} [right] The second cartographic.
-     * @returns {Boolean} <code>true</code> if left and right are equal, <code>false</code> otherwise.
-     */
-    Cartographic.equals = function(left, right) {
-        return (left === right) ||
-                ((defined(left)) &&
-                 (defined(right)) &&
-                 (left.longitude === right.longitude) &&
-                 (left.latitude === right.latitude) &&
-                 (left.height === right.height));
-    };
-
-    /**
-     * Compares the provided cartographics componentwise and returns
-     * <code>true</code> if they are within the provided epsilon,
-     * <code>false</code> otherwise.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} [left] The first cartographic.
-     * @param {Cartographic} [right] The second cartographic.
-     * @param {Number} epsilon The epsilon to use for equality testing.
-     * @returns {Boolean} <code>true</code> if left and right are within the provided epsilon, <code>false</code> otherwise.
-     */
-    Cartographic.equalsEpsilon = function(left, right, epsilon) {
-                if (typeof epsilon !== 'number') {
-            throw new DeveloperError('epsilon is required and must be a number.');
-        }
-        
-        return (left === right) ||
-               ((defined(left)) &&
-                (defined(right)) &&
-                (Math.abs(left.longitude - right.longitude) <= epsilon) &&
-                (Math.abs(left.latitude - right.latitude) <= epsilon) &&
-                (Math.abs(left.height - right.height) <= epsilon));
-    };
-
-    /**
-     * Creates a string representing the provided cartographic in the format '(longitude, latitude, height)'.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} cartographic The cartographic to stringify.
-     * @returns {String} A string representing the provided cartographic in the format '(longitude, latitude, height)'.
-     */
-    Cartographic.toString = function(cartographic) {
-                if (!defined(cartographic)) {
-            throw new DeveloperError('cartographic is required');
-        }
-        
-        return '(' + cartographic.longitude + ', ' + cartographic.latitude + ', ' + cartographic.height + ')';
-    };
-
-    /**
-     * An immutable Cartographic instance initialized to (0.0, 0.0, 0.0).
-     *
-     * @memberof Cartographic
-     */
-    Cartographic.ZERO = freezeObject(new Cartographic(0.0, 0.0, 0.0));
-
-    /**
-     * Duplicates this instance.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} [result] The object onto which to store the result.
-     * @returns {Cartographic} The modified result parameter or a new Cartographic instance if one was not provided.
-     */
-    Cartographic.prototype.clone = function(result) {
-        return Cartographic.clone(this, result);
-    };
-
-    /**
-     * Compares the provided against this cartographic componentwise and returns
-     * <code>true</code> if they are equal, <code>false</code> otherwise.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} [right] The second cartographic.
-     * @returns {Boolean} <code>true</code> if left and right are equal, <code>false</code> otherwise.
-     */
-    Cartographic.prototype.equals = function(right) {
-        return Cartographic.equals(this, right);
-    };
-
-    /**
-     * Compares the provided against this cartographic componentwise and returns
-     * <code>true</code> if they are within the provided epsilon,
-     * <code>false</code> otherwise.
-     * @memberof Cartographic
-     *
-     * @param {Cartographic} [right] The second cartographic.
-     * @param {Number} epsilon The epsilon to use for equality testing.
-     * @returns {Boolean} <code>true</code> if left and right are within the provided epsilon, <code>false</code> otherwise.
-     */
-    Cartographic.prototype.equalsEpsilon = function(right, epsilon) {
-        return Cartographic.equalsEpsilon(this, right, epsilon);
-    };
-
-    /**
-     * Creates a string representing this cartographic in the format '(longitude, latitude, height)'.
-     * @memberof Cartographic
-     *
-     * @returns {String} A string representing the provided cartographic in the format '(longitude, latitude, height)'.
-     */
-    Cartographic.prototype.toString = function() {
-        return Cartographic.toString(this);
-    };
-
-    return Cartographic;
-});
-
-/*global define*/
-define('Core/defineProperties',['./defined'], function(defined) {
-    "use strict";
-
-    var definePropertyWorks = (function() {
-        try {
-            return 'x' in Object.defineProperty({}, 'x', {});
-        } catch (e) {
-            return false;
-        }
-    })();
-
-    /**
-     * Defines properties on an object, using Object.defineProperties if available,
-     * otherwise returns the object unchanged.  This function should be used in
-     * setup code to prevent errors from completely halting JavaScript execution
-     * in legacy browsers.
-     *
-     * @private
-     *
-     * @exports defineProperties
-     */
-    var defineProperties = Object.defineProperties;
-    if (!definePropertyWorks || !defined(defineProperties)) {
-        defineProperties = function(o) {
-            return o;
-        };
+  Object.defineProperties(TerrainProvider.prototype, {
+    /**
+     * Gets an event that is raised when the terrain provider encounters an asynchronous error..  By subscribing
+     * to the event, you will be notified of the error and can potentially recover from it.  Event listeners
+     * are passed an instance of {@link TileProviderError}.
+     * @memberof TerrainProvider.prototype
+     * @type {Event}
+     * @readonly
+     */
+    errorEvent: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets the credit to display when this terrain provider is active.  Typically this is used to credit
+     * the source of the terrain. This function should
+     * not be called before {@link TerrainProvider#ready} returns true.
+     * @memberof TerrainProvider.prototype
+     * @type {Credit}
+     * @readonly
+     */
+    credit: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets the tiling scheme used by the provider.  This function should
+     * not be called before {@link TerrainProvider#ready} returns true.
+     * @memberof TerrainProvider.prototype
+     * @type {TilingScheme}
+     * @readonly
+     */
+    tilingScheme: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets a value indicating whether or not the provider is ready for use.
+     * @memberof TerrainProvider.prototype
+     * @type {Boolean}
+     * @readonly
+     */
+    ready: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets a promise that resolves to true when the provider is ready for use.
+     * @memberof TerrainProvider.prototype
+     * @type {Promise.<Boolean>}
+     * @readonly
+     */
+    readyPromise: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets a value indicating whether or not the provider includes a water mask.  The water mask
+     * indicates which areas of the globe are water rather than land, so they can be rendered
+     * as a reflective surface with animated waves.  This function should not be
+     * called before {@link TerrainProvider#ready} returns true.
+     * @memberof TerrainProvider.prototype
+     * @type {Boolean}
+     * @readonly
+     */
+    hasWaterMask: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets a value indicating whether or not the requested tiles include vertex normals.
+     * This function should not be called before {@link TerrainProvider#ready} returns true.
+     * @memberof TerrainProvider.prototype
+     * @type {Boolean}
+     * @readonly
+     */
+    hasVertexNormals: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+
+    /**
+     * Gets an object that can be used to determine availability of terrain from this provider, such as
+     * at points and in rectangles.  This function should not be called before
+     * {@link TerrainProvider#ready} returns true.  This property may be undefined if availability
+     * information is not available.
+     * @memberof TerrainProvider.prototype
+     * @type {TileAvailability}
+     * @readonly
+     */
+    availability: {
+      get: RuntimeError.DeveloperError.throwInstantiationError,
+    },
+  });
+
+  const regularGridIndicesCache = [];
+
+  /**
+   * Gets a list of indices for a triangle mesh representing a regular grid.  Calling
+   * this function multiple times with the same grid width and height returns the
+   * same list of indices.  The total number of vertices must be less than or equal
+   * to 65536.
+   *
+   * @param {Number} width The number of vertices in the regular grid in the horizontal direction.
+   * @param {Number} height The number of vertices in the regular grid in the vertical direction.
+   * @returns {Uint16Array|Uint32Array} The list of indices. Uint16Array gets returned for 64KB or less and Uint32Array for 4GB or less.
+   */
+  TerrainProvider.getRegularGridIndices = function (width, height) {
+    //>>includeStart('debug', pragmas.debug);
+    if (width * height >= ComponentDatatype.CesiumMath.FOUR_GIGABYTES) {
+      throw new RuntimeError.DeveloperError(
+        "The total number of vertices (width * height) must be less than 4,294,967,296."
+      );
+    }
+    //>>includeEnd('debug');
+
+    let byWidth = regularGridIndicesCache[width];
+    if (!defaultValue.defined(byWidth)) {
+      regularGridIndicesCache[width] = byWidth = [];
     }
 
-    return defineProperties;
-});
-/*global define*/
-define('Core/Ellipsoid',[
-        './freezeObject',
-        './defaultValue',
-        './defined',
-        './defineProperties',
-        './DeveloperError',
-        './Math',
-        './Cartesian3',
-        './Cartographic'
-       ], function(
-         freezeObject,
-         defaultValue,
-         defined,
-         defineProperties,
-         DeveloperError,
-         CesiumMath,
-         Cartesian3,
-         Cartographic) {
-    "use strict";
+    let indices = byWidth[height];
+    if (!defaultValue.defined(indices)) {
+      if (width * height < ComponentDatatype.CesiumMath.SIXTY_FOUR_KILOBYTES) {
+        indices = byWidth[height] = new Uint16Array(
+          (width - 1) * (height - 1) * 6
+        );
+      } else {
+        indices = byWidth[height] = new Uint32Array(
+          (width - 1) * (height - 1) * 6
+        );
+      }
+      addRegularGridIndices(width, height, indices, 0);
+    }
 
-    /**
-     * A quadratic surface defined in Cartesian coordinates by the equation
-     * <code>(x / a)^2 + (y / b)^2 + (z / c)^2 = 1</code>.  Primarily used
-     * by Cesium to represent the shape of planetary bodies.
-     *
-     * Rather than constructing this object directly, one of the provided
-     * constants is normally used.
-     * @alias Ellipsoid
-     * @constructor
-     * @immutable
-     *
-     * @param {Number} [x=0] The radius in the x direction.
-     * @param {Number} [y=0] The radius in the y direction.
-     * @param {Number} [z=0] The radius in the z direction.
-     *
-     * @exception {DeveloperError} All radii components must be greater than or equal to zero.
-     *
-     * @see Ellipsoid.fromCartesian3
-     * @see Ellipsoid.WGS84
-     * @see Ellipsoid.UNIT_SPHERE
-     */
-    var Ellipsoid = function(x, y, z) {
-        x = defaultValue(x, 0.0);
-        y = defaultValue(y, 0.0);
-        z = defaultValue(z, 0.0);
+    return indices;
+  };
 
-                if (x < 0.0 || y < 0.0 || z < 0.0) {
-            throw new DeveloperError('All radii components must be greater than or equal to zero.');
-        }
-        
-        this._radii = new Cartesian3(x, y, z);
+  const regularGridAndEdgeIndicesCache = [];
 
-        this._radiiSquared = new Cartesian3(x * x,
-                                            y * y,
-                                            z * z);
+  /**
+   * @private
+   */
+  TerrainProvider.getRegularGridIndicesAndEdgeIndices = function (width, height) {
+    //>>includeStart('debug', pragmas.debug);
+    if (width * height >= ComponentDatatype.CesiumMath.FOUR_GIGABYTES) {
+      throw new RuntimeError.DeveloperError(
+        "The total number of vertices (width * height) must be less than 4,294,967,296."
+      );
+    }
+    //>>includeEnd('debug');
 
-        this._radiiToTheFourth = new Cartesian3(x * x * x * x,
-                                                y * y * y * y,
-                                                z * z * z * z);
+    let byWidth = regularGridAndEdgeIndicesCache[width];
+    if (!defaultValue.defined(byWidth)) {
+      regularGridAndEdgeIndicesCache[width] = byWidth = [];
+    }
 
-        this._oneOverRadii = new Cartesian3(x === 0.0 ? 0.0 : 1.0 / x,
-                                            y === 0.0 ? 0.0 : 1.0 / y,
-                                            z === 0.0 ? 0.0 : 1.0 / z);
+    let indicesAndEdges = byWidth[height];
+    if (!defaultValue.defined(indicesAndEdges)) {
+      const indices = TerrainProvider.getRegularGridIndices(width, height);
 
-        this._oneOverRadiiSquared = new Cartesian3(x === 0.0 ? 0.0 : 1.0 / (x * x),
-                                                   y === 0.0 ? 0.0 : 1.0 / (y * y),
-                                                   z === 0.0 ? 0.0 : 1.0 / (z * z));
+      const edgeIndices = getEdgeIndices(width, height);
+      const westIndicesSouthToNorth = edgeIndices.westIndicesSouthToNorth;
+      const southIndicesEastToWest = edgeIndices.southIndicesEastToWest;
+      const eastIndicesNorthToSouth = edgeIndices.eastIndicesNorthToSouth;
+      const northIndicesWestToEast = edgeIndices.northIndicesWestToEast;
 
-        this._minimumRadius = Math.min(x, y, z);
+      indicesAndEdges = byWidth[height] = {
+        indices: indices,
+        westIndicesSouthToNorth: westIndicesSouthToNorth,
+        southIndicesEastToWest: southIndicesEastToWest,
+        eastIndicesNorthToSouth: eastIndicesNorthToSouth,
+        northIndicesWestToEast: northIndicesWestToEast,
+      };
+    }
 
-        this._maximumRadius = Math.max(x, y, z);
+    return indicesAndEdges;
+  };
 
-        this._centerToleranceSquared = CesiumMath.EPSILON1;
+  const regularGridAndSkirtAndEdgeIndicesCache = [];
+
+  /**
+   * @private
+   */
+  TerrainProvider.getRegularGridAndSkirtIndicesAndEdgeIndices = function (
+    width,
+    height
+  ) {
+    //>>includeStart('debug', pragmas.debug);
+    if (width * height >= ComponentDatatype.CesiumMath.FOUR_GIGABYTES) {
+      throw new RuntimeError.DeveloperError(
+        "The total number of vertices (width * height) must be less than 4,294,967,296."
+      );
+    }
+    //>>includeEnd('debug');
+
+    let byWidth = regularGridAndSkirtAndEdgeIndicesCache[width];
+    if (!defaultValue.defined(byWidth)) {
+      regularGridAndSkirtAndEdgeIndicesCache[width] = byWidth = [];
+    }
+
+    let indicesAndEdges = byWidth[height];
+    if (!defaultValue.defined(indicesAndEdges)) {
+      const gridVertexCount = width * height;
+      const gridIndexCount = (width - 1) * (height - 1) * 6;
+      const edgeVertexCount = width * 2 + height * 2;
+      const edgeIndexCount = Math.max(0, edgeVertexCount - 4) * 6;
+      const vertexCount = gridVertexCount + edgeVertexCount;
+      const indexCount = gridIndexCount + edgeIndexCount;
+
+      const edgeIndices = getEdgeIndices(width, height);
+      const westIndicesSouthToNorth = edgeIndices.westIndicesSouthToNorth;
+      const southIndicesEastToWest = edgeIndices.southIndicesEastToWest;
+      const eastIndicesNorthToSouth = edgeIndices.eastIndicesNorthToSouth;
+      const northIndicesWestToEast = edgeIndices.northIndicesWestToEast;
+
+      const indices = IndexDatatype.IndexDatatype.createTypedArray(vertexCount, indexCount);
+      addRegularGridIndices(width, height, indices, 0);
+      TerrainProvider.addSkirtIndices(
+        westIndicesSouthToNorth,
+        southIndicesEastToWest,
+        eastIndicesNorthToSouth,
+        northIndicesWestToEast,
+        gridVertexCount,
+        indices,
+        gridIndexCount
+      );
+
+      indicesAndEdges = byWidth[height] = {
+        indices: indices,
+        westIndicesSouthToNorth: westIndicesSouthToNorth,
+        southIndicesEastToWest: southIndicesEastToWest,
+        eastIndicesNorthToSouth: eastIndicesNorthToSouth,
+        northIndicesWestToEast: northIndicesWestToEast,
+        indexCountWithoutSkirts: gridIndexCount,
+      };
+    }
+
+    return indicesAndEdges;
+  };
+
+  /**
+   * @private
+   */
+  TerrainProvider.addSkirtIndices = function (
+    westIndicesSouthToNorth,
+    southIndicesEastToWest,
+    eastIndicesNorthToSouth,
+    northIndicesWestToEast,
+    vertexCount,
+    indices,
+    offset
+  ) {
+    let vertexIndex = vertexCount;
+    offset = addSkirtIndices(
+      westIndicesSouthToNorth,
+      vertexIndex,
+      indices,
+      offset
+    );
+    vertexIndex += westIndicesSouthToNorth.length;
+    offset = addSkirtIndices(
+      southIndicesEastToWest,
+      vertexIndex,
+      indices,
+      offset
+    );
+    vertexIndex += southIndicesEastToWest.length;
+    offset = addSkirtIndices(
+      eastIndicesNorthToSouth,
+      vertexIndex,
+      indices,
+      offset
+    );
+    vertexIndex += eastIndicesNorthToSouth.length;
+    addSkirtIndices(northIndicesWestToEast, vertexIndex, indices, offset);
+  };
+
+  function getEdgeIndices(width, height) {
+    const westIndicesSouthToNorth = new Array(height);
+    const southIndicesEastToWest = new Array(width);
+    const eastIndicesNorthToSouth = new Array(height);
+    const northIndicesWestToEast = new Array(width);
+
+    let i;
+    for (i = 0; i < width; ++i) {
+      northIndicesWestToEast[i] = i;
+      southIndicesEastToWest[i] = width * height - 1 - i;
+    }
+
+    for (i = 0; i < height; ++i) {
+      eastIndicesNorthToSouth[i] = (i + 1) * width - 1;
+      westIndicesSouthToNorth[i] = (height - i - 1) * width;
+    }
+
+    return {
+      westIndicesSouthToNorth: westIndicesSouthToNorth,
+      southIndicesEastToWest: southIndicesEastToWest,
+      eastIndicesNorthToSouth: eastIndicesNorthToSouth,
+      northIndicesWestToEast: northIndicesWestToEast,
     };
+  }
 
-    defineProperties(Ellipsoid.prototype, {
-        /**
-         * Gets the radii of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Cartesian3}
-         */
-        radii : {
-            get: function() {
-                return this._radii;
-            }
-        },
-        /**
-         * Gets the squared radii of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Cartesian3}
-         */
-        radiiSquared : {
-            get : function() {
-                return this._radiiSquared;
-            }
-        },
-        /**
-         * Gets the radii of the ellipsoid raise to the fourth power.
-         * @memberof Ellipsoid.prototype
-         * @type {Cartesian3}
-         */
-        radiiToTheFourth : {
-            get : function() {
-                return this._radiiToTheFourth;
-            }
-        },
-        /**
-         * Gets one over the radii of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Cartesian3}
-         */
-        oneOverRadii : {
-            get : function() {
-                return this._oneOverRadii;
-            }
-        },
-        /**
-         * Gets one over the squared radii of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Cartesian3}
-         */
-        oneOverRadiiSquared : {
-            get : function() {
-                return this._oneOverRadiiSquared;
-            }
-        },
-        /**
-         * Gets the minimum radius of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Number}
-         */
-        minimumRadius : {
-            get : function() {
-                return this._minimumRadius;
-            }
-        },
-        /**
-         * Gets the maximum radius of the ellipsoid.
-         * @memberof Ellipsoid.prototype
-         * @type {Number}
-         */
-        maximumRadius : {
-            get : function() {
-                return this._maximumRadius;
-            }
-        }
+  function addRegularGridIndices(width, height, indices, offset) {
+    let index = 0;
+    for (let j = 0; j < height - 1; ++j) {
+      for (let i = 0; i < width - 1; ++i) {
+        const upperLeft = index;
+        const lowerLeft = upperLeft + width;
+        const lowerRight = lowerLeft + 1;
+        const upperRight = upperLeft + 1;
+
+        indices[offset++] = upperLeft;
+        indices[offset++] = lowerLeft;
+        indices[offset++] = upperRight;
+        indices[offset++] = upperRight;
+        indices[offset++] = lowerLeft;
+        indices[offset++] = lowerRight;
+
+        ++index;
+      }
+      ++index;
+    }
+  }
+
+  function addSkirtIndices(edgeIndices, vertexIndex, indices, offset) {
+    let previousIndex = edgeIndices[0];
+
+    const length = edgeIndices.length;
+    for (let i = 1; i < length; ++i) {
+      const index = edgeIndices[i];
+
+      indices[offset++] = previousIndex;
+      indices[offset++] = index;
+      indices[offset++] = vertexIndex;
+
+      indices[offset++] = vertexIndex;
+      indices[offset++] = index;
+      indices[offset++] = vertexIndex + 1;
+
+      previousIndex = index;
+      ++vertexIndex;
+    }
+
+    return offset;
+  }
+
+  /**
+   * Specifies the quality of terrain created from heightmaps.  A value of 1.0 will
+   * ensure that adjacent heightmap vertices are separated by no more than
+   * {@link Globe.maximumScreenSpaceError} screen pixels and will probably go very slowly.
+   * A value of 0.5 will cut the estimated level zero geometric error in half, allowing twice the
+   * screen pixels between adjacent heightmap vertices and thus rendering more quickly.
+   * @type {Number}
+   */
+  TerrainProvider.heightmapTerrainQuality = 0.25;
+
+  /**
+   * Determines an appropriate geometric error estimate when the geometry comes from a heightmap.
+   *
+   * @param {Ellipsoid} ellipsoid The ellipsoid to which the terrain is attached.
+   * @param {Number} tileImageWidth The width, in pixels, of the heightmap associated with a single tile.
+   * @param {Number} numberOfTilesAtLevelZero The number of tiles in the horizontal direction at tile level zero.
+   * @returns {Number} An estimated geometric error.
+   */
+  TerrainProvider.getEstimatedLevelZeroGeometricErrorForAHeightmap = function (
+    ellipsoid,
+    tileImageWidth,
+    numberOfTilesAtLevelZero
+  ) {
+    return (
+      (ellipsoid.maximumRadius *
+        2 *
+        Math.PI *
+        TerrainProvider.heightmapTerrainQuality) /
+      (tileImageWidth * numberOfTilesAtLevelZero)
+    );
+  };
+
+  /**
+   * Requests the geometry for a given tile.  This function should not be called before
+   * {@link TerrainProvider#ready} returns true.  The result must include terrain data and
+   * may optionally include a water mask and an indication of which child tiles are available.
+   * @function
+   *
+   * @param {Number} x The X coordinate of the tile for which to request geometry.
+   * @param {Number} y The Y coordinate of the tile for which to request geometry.
+   * @param {Number} level The level of the tile for which to request geometry.
+   * @param {Request} [request] The request object. Intended for internal use only.
+   *
+   * @returns {Promise.<TerrainData>|undefined} A promise for the requested geometry.  If this method
+   *          returns undefined instead of a promise, it is an indication that too many requests are already
+   *          pending and the request will be retried later.
+   */
+  TerrainProvider.prototype.requestTileGeometry =
+    RuntimeError.DeveloperError.throwInstantiationError;
+
+  /**
+   * Gets the maximum geometric error allowed in a tile at a given level.  This function should not be
+   * called before {@link TerrainProvider#ready} returns true.
+   * @function
+   *
+   * @param {Number} level The tile level for which to get the maximum geometric error.
+   * @returns {Number} The maximum geometric error.
+   */
+  TerrainProvider.prototype.getLevelMaximumGeometricError =
+    RuntimeError.DeveloperError.throwInstantiationError;
+
+  /**
+   * Determines whether data for a tile is available to be loaded.
+   * @function
+   *
+   * @param {Number} x The X coordinate of the tile for which to request geometry.
+   * @param {Number} y The Y coordinate of the tile for which to request geometry.
+   * @param {Number} level The level of the tile for which to request geometry.
+   * @returns {Boolean|undefined} Undefined if not supported by the terrain provider, otherwise true or false.
+   */
+  TerrainProvider.prototype.getTileDataAvailable =
+    RuntimeError.DeveloperError.throwInstantiationError;
+
+  /**
+   * Makes sure we load availability data for a tile
+   * @function
+   *
+   * @param {Number} x The X coordinate of the tile for which to request geometry.
+   * @param {Number} y The Y coordinate of the tile for which to request geometry.
+   * @param {Number} level The level of the tile for which to request geometry.
+   * @returns {undefined|Promise<void>} Undefined if nothing need to be loaded or a Promise that resolves when all required tiles are loaded
+   */
+  TerrainProvider.prototype.loadTileDataAvailability =
+    RuntimeError.DeveloperError.throwInstantiationError;
+
+  const maxShort = 32767;
+
+  const cartesian3Scratch = new Matrix2.Cartesian3();
+  const scratchMinimum = new Matrix2.Cartesian3();
+  const scratchMaximum = new Matrix2.Cartesian3();
+  const cartographicScratch = new Matrix2.Cartographic();
+  const toPack = new Matrix2.Cartesian2();
+
+  function createVerticesFromQuantizedTerrainMesh(
+    parameters,
+    transferableObjects
+  ) {
+    const quantizedVertices = parameters.quantizedVertices;
+    const quantizedVertexCount = quantizedVertices.length / 3;
+    const octEncodedNormals = parameters.octEncodedNormals;
+    const edgeVertexCount =
+      parameters.westIndices.length +
+      parameters.eastIndices.length +
+      parameters.southIndices.length +
+      parameters.northIndices.length;
+    const includeWebMercatorT = parameters.includeWebMercatorT;
+
+    const exaggeration = parameters.exaggeration;
+    const exaggerationRelativeHeight = parameters.exaggerationRelativeHeight;
+    const hasExaggeration = exaggeration !== 1.0;
+    const includeGeodeticSurfaceNormals = hasExaggeration;
+
+    const rectangle = Matrix2.Rectangle.clone(parameters.rectangle);
+    const west = rectangle.west;
+    const south = rectangle.south;
+    const east = rectangle.east;
+    const north = rectangle.north;
+
+    const ellipsoid = Matrix2.Ellipsoid.clone(parameters.ellipsoid);
+
+    const minimumHeight = parameters.minimumHeight;
+    const maximumHeight = parameters.maximumHeight;
+
+    const center = parameters.relativeToCenter;
+    const fromENU = Transforms.Transforms.eastNorthUpToFixedFrame(center, ellipsoid);
+    const toENU = Matrix2.Matrix4.inverseTransformation(fromENU, new Matrix2.Matrix4());
+
+    let southMercatorY;
+    let oneOverMercatorHeight;
+    if (includeWebMercatorT) {
+      southMercatorY = WebMercatorProjection.WebMercatorProjection.geodeticLatitudeToMercatorAngle(
+        south
+      );
+      oneOverMercatorHeight =
+        1.0 /
+        (WebMercatorProjection.WebMercatorProjection.geodeticLatitudeToMercatorAngle(north) -
+          southMercatorY);
+    }
+
+    const uBuffer = quantizedVertices.subarray(0, quantizedVertexCount);
+    const vBuffer = quantizedVertices.subarray(
+      quantizedVertexCount,
+      2 * quantizedVertexCount
+    );
+    const heightBuffer = quantizedVertices.subarray(
+      quantizedVertexCount * 2,
+      3 * quantizedVertexCount
+    );
+    const hasVertexNormals = defaultValue.defined(octEncodedNormals);
+
+    const uvs = new Array(quantizedVertexCount);
+    const heights = new Array(quantizedVertexCount);
+    const positions = new Array(quantizedVertexCount);
+    const webMercatorTs = includeWebMercatorT
+      ? new Array(quantizedVertexCount)
+      : [];
+    const geodeticSurfaceNormals = includeGeodeticSurfaceNormals
+      ? new Array(quantizedVertexCount)
+      : [];
+
+    const minimum = scratchMinimum;
+    minimum.x = Number.POSITIVE_INFINITY;
+    minimum.y = Number.POSITIVE_INFINITY;
+    minimum.z = Number.POSITIVE_INFINITY;
+
+    const maximum = scratchMaximum;
+    maximum.x = Number.NEGATIVE_INFINITY;
+    maximum.y = Number.NEGATIVE_INFINITY;
+    maximum.z = Number.NEGATIVE_INFINITY;
+
+    let minLongitude = Number.POSITIVE_INFINITY;
+    let maxLongitude = Number.NEGATIVE_INFINITY;
+    let minLatitude = Number.POSITIVE_INFINITY;
+    let maxLatitude = Number.NEGATIVE_INFINITY;
+
+    for (let i = 0; i < quantizedVertexCount; ++i) {
+      const rawU = uBuffer[i];
+      const rawV = vBuffer[i];
+
+      const u = rawU / maxShort;
+      const v = rawV / maxShort;
+      const height = ComponentDatatype.CesiumMath.lerp(
+        minimumHeight,
+        maximumHeight,
+        heightBuffer[i] / maxShort
+      );
+
+      cartographicScratch.longitude = ComponentDatatype.CesiumMath.lerp(west, east, u);
+      cartographicScratch.latitude = ComponentDatatype.CesiumMath.lerp(south, north, v);
+      cartographicScratch.height = height;
+
+      minLongitude = Math.min(cartographicScratch.longitude, minLongitude);
+      maxLongitude = Math.max(cartographicScratch.longitude, maxLongitude);
+      minLatitude = Math.min(cartographicScratch.latitude, minLatitude);
+      maxLatitude = Math.max(cartographicScratch.latitude, maxLatitude);
+
+      const position = ellipsoid.cartographicToCartesian(cartographicScratch);
+
+      uvs[i] = new Matrix2.Cartesian2(u, v);
+      heights[i] = height;
+      positions[i] = position;
+
+      if (includeWebMercatorT) {
+        webMercatorTs[i] =
+          (WebMercatorProjection.WebMercatorProjection.geodeticLatitudeToMercatorAngle(
+            cartographicScratch.latitude
+          ) -
+            southMercatorY) *
+          oneOverMercatorHeight;
+      }
+
+      if (includeGeodeticSurfaceNormals) {
+        geodeticSurfaceNormals[i] = ellipsoid.geodeticSurfaceNormal(position);
+      }
+
+      Matrix2.Matrix4.multiplyByPoint(toENU, position, cartesian3Scratch);
+
+      Matrix2.Cartesian3.minimumByComponent(cartesian3Scratch, minimum, minimum);
+      Matrix2.Cartesian3.maximumByComponent(cartesian3Scratch, maximum, maximum);
+    }
+
+    const westIndicesSouthToNorth = copyAndSort(parameters.westIndices, function (
+      a,
+      b
+    ) {
+      return uvs[a].y - uvs[b].y;
+    });
+    const eastIndicesNorthToSouth = copyAndSort(parameters.eastIndices, function (
+      a,
+      b
+    ) {
+      return uvs[b].y - uvs[a].y;
+    });
+    const southIndicesEastToWest = copyAndSort(parameters.southIndices, function (
+      a,
+      b
+    ) {
+      return uvs[b].x - uvs[a].x;
+    });
+    const northIndicesWestToEast = copyAndSort(parameters.northIndices, function (
+      a,
+      b
+    ) {
+      return uvs[a].x - uvs[b].x;
     });
 
-    /**
-     * Duplicates an Ellipsoid instance.
-     *
-     * @memberof Ellipsoid
-     *
-     * @param {Ellipsoid} ellipsoid The ellipsoid to duplicate.
-     * @param {Ellipsoid} [result] The object onto which to store the result, or undefined if a new
-     *                    instance should be created.
-     * @returns {Ellipsoid} The cloned Ellipsoid. (Returns undefined if ellipsoid is undefined)
-     */
-    Ellipsoid.clone = function(ellipsoid, result) {
-        if (!defined(ellipsoid)) {
-            return undefined;
-        }
-        var radii = ellipsoid._radii;
-
-        if (!defined(result)) {
-            return new Ellipsoid(radii.x, radii.y, radii.z);
-        }
-
-        Cartesian3.clone(radii, result._radii);
-        Cartesian3.clone(ellipsoid._radiiSquared, result._radiiSquared);
-        Cartesian3.clone(ellipsoid._radiiToTheFourth, result._radiiToTheFourth);
-        Cartesian3.clone(ellipsoid._oneOverRadii, result._oneOverRadii);
-        Cartesian3.clone(ellipsoid._oneOverRadiiSquared, result._oneOverRadiiSquared);
-        result._minimumRadius = ellipsoid._minimumRadius;
-        result._maximumRadius = ellipsoid._maximumRadius;
-        result._centerToleranceSquared = ellipsoid._centerToleranceSquared;
-
-        return result;
-    };
-
-    /**
-     * Computes an Ellipsoid from a Cartesian specifying the radii in x, y, and z directions.
-     *
-     * @param {Cartesian3} [radii=Cartesian3.ZERO] The ellipsoid's radius in the x, y, and z directions.
-     * @returns {Ellipsoid} A new Ellipsoid instance.
-     *
-     * @exception {DeveloperError} All radii components must be greater than or equal to zero.
-     *
-     * @see Ellipsoid.WGS84
-     * @see Ellipsoid.UNIT_SPHERE
-     */
-    Ellipsoid.fromCartesian3 = function(cartesian) {
-        if (!defined(cartesian)) {
-            return new Ellipsoid();
-        }
-        return new Ellipsoid(cartesian.x, cartesian.y, cartesian.z);
-    };
-
-    /**
-     * An Ellipsoid instance initialized to the WGS84 standard.
-     * @memberof Ellipsoid
-     *
-     * @see czm_getWgs84EllipsoidEC
-     */
-    Ellipsoid.WGS84 = freezeObject(new Ellipsoid(6378137.0, 6378137.0, 6356752.3142451793));
-
-    /**
-     * An Ellipsoid instance initialized to radii of (1.0, 1.0, 1.0).
-     * @memberof Ellipsoid
-     */
-    Ellipsoid.UNIT_SPHERE = freezeObject(new Ellipsoid(1.0, 1.0, 1.0));
-
-    /**
-     * An Ellipsoid instance initialized to a sphere with the lunar radius.
-     * @memberof Ellipsoid
-     */
-    Ellipsoid.MOON = freezeObject(new Ellipsoid(CesiumMath.LUNAR_RADIUS, CesiumMath.LUNAR_RADIUS, CesiumMath.LUNAR_RADIUS));
-
-    /**
-     * Duplicates an Ellipsoid instance.
-     *
-     * @memberof Ellipsoid
-     *
-     * @param {Ellipsoid} [result] The object onto which to store the result, or undefined if a new
-     *                    instance should be created.
-     * @returns {Ellipsoid} The cloned Ellipsoid.
-     */
-    Ellipsoid.prototype.clone = function(result) {
-        return Ellipsoid.clone(this, result);
-    };
-
-    /**
-     * Computes the unit vector directed from the center of this ellipsoid toward the provided Cartesian position.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} cartesian The Cartesian for which to to determine the geocentric normal.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if none was provided.
-     */
-    Ellipsoid.prototype.geocentricSurfaceNormal = Cartesian3.normalize;
-
-    /**
-     * Computes the normal of the plane tangent to the surface of the ellipsoid at the provided position.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartographic} cartographic The cartographic position for which to to determine the geodetic normal.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if none was provided.
-     */
-    Ellipsoid.prototype.geodeticSurfaceNormalCartographic = function(cartographic, result) {
-                if (!defined(cartographic)) {
-            throw new DeveloperError('cartographic is required.');
-        }
-        
-        var longitude = cartographic.longitude;
-        var latitude = cartographic.latitude;
-        var cosLatitude = Math.cos(latitude);
-
-        var x = cosLatitude * Math.cos(longitude);
-        var y = cosLatitude * Math.sin(longitude);
-        var z = Math.sin(latitude);
-
-        if (!defined(result)) {
-            result = new Cartesian3();
-        }
-        result.x = x;
-        result.y = y;
-        result.z = z;
-        return Cartesian3.normalize(result, result);
-    };
-
-    /**
-     * Computes the normal of the plane tangent to the surface of the ellipsoid at the provided position.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} cartesian The Cartesian position for which to to determine the surface normal.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if none was provided.
-     */
-    Ellipsoid.prototype.geodeticSurfaceNormal = function(cartesian, result) {
-        result = Cartesian3.multiplyComponents(cartesian, this._oneOverRadiiSquared, result);
-        return Cartesian3.normalize(result, result);
-    };
-
-    var cartographicToCartesianNormal = new Cartesian3();
-    var cartographicToCartesianK = new Cartesian3();
-
-    /**
-     * Converts the provided cartographic to Cartesian representation.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartographic} cartographic The cartographic position.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if none was provided.
-     *
-     * @example
-     * //Create a Cartographic and determine it's Cartesian representation on a WGS84 ellipsoid.
-     * var position = new Cesium.Cartographic(Cesium.Math.toRadians(21), Cesium.Math.toRadians(78), 5000);
-     * var cartesianPosition = Cesium.Ellipsoid.WGS84.cartographicToCartesian(position);
-     */
-    Ellipsoid.prototype.cartographicToCartesian = function(cartographic, result) {
-        //`cartographic is required` is thrown from geodeticSurfaceNormalCartographic.
-        var n = cartographicToCartesianNormal;
-        var k = cartographicToCartesianK;
-        this.geodeticSurfaceNormalCartographic(cartographic, n);
-        Cartesian3.multiplyComponents(this._radiiSquared, n, k);
-        var gamma = Math.sqrt(Cartesian3.dot(n, k));
-        Cartesian3.divideByScalar(k, gamma, k);
-        Cartesian3.multiplyByScalar(n, cartographic.height, n);
-        return Cartesian3.add(k, n, result);
-    };
-
-    /**
-     * Converts the provided array of cartographics to an array of Cartesians.
-     * @memberof Ellipsoid
-     *
-     * @param {Array} cartographics An array of cartographic positions.
-     * @param {Array} [result] The object onto which to store the result.
-     * @returns {Array} The modified result parameter or a new Array instance if none was provided.
-     *
-     * @example
-     * //Convert an array of Cartographics and determine their Cartesian representation on a WGS84 ellipsoid.
-     * var positions = [new Cesium.Cartographic(Cesium.Math.toRadians(21), Cesium.Math.toRadians(78), 0),
-     *                  new Cesium.Cartographic(Cesium.Math.toRadians(21.321), Cesium.Math.toRadians(78.123), 100),
-     *                  new Cesium.Cartographic(Cesium.Math.toRadians(21.645), Cesium.Math.toRadians(78.456), 250)
-     * var cartesianPositions = Cesium.Ellipsoid.WGS84.cartographicArrayToCartesianArray(positions);
-     */
-    Ellipsoid.prototype.cartographicArrayToCartesianArray = function(cartographics, result) {
-                if (!defined(cartographics)) {
-            throw new DeveloperError('cartographics is required.');
-        }
-        
-        var length = cartographics.length;
-        if (!defined(result)) {
-            result = new Array(length);
-        } else {
-            result.length = length;
-        }
-        for ( var i = 0; i < length; i++) {
-            result[i] = this.cartographicToCartesian(cartographics[i], result[i]);
-        }
-        return result;
-    };
-
-    var cartesianToCartographicN = new Cartesian3();
-    var cartesianToCartographicP = new Cartesian3();
-    var cartesianToCartographicH = new Cartesian3();
-
-    /**
-     * Converts the provided cartesian to cartographic representation.
-     * The cartesian is undefined at the center of the ellipsoid.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} cartesian The Cartesian position to convert to cartographic representation.
-     * @param {Cartographic} [result] The object onto which to store the result.
-     * @returns {Cartographic} The modified result parameter, new Cartographic instance if none was provided, or undefined if the cartesian is at the center of the ellipsoid.
-     *
-     * @example
-     * //Create a Cartesian and determine it's Cartographic representation on a WGS84 ellipsoid.
-     * var position = new Cesium.Cartesian(17832.12, 83234.52, 952313.73);
-     * var cartographicPosition = Cesium.Ellipsoid.WGS84.cartesianToCartographic(position);
-     */
-    Ellipsoid.prototype.cartesianToCartographic = function(cartesian, result) {
-        //`cartesian is required.` is thrown from scaleToGeodeticSurface
-        var p = this.scaleToGeodeticSurface(cartesian, cartesianToCartographicP);
-
-        if (!defined(p)) {
-            return undefined;
-        }
-
-        var n = this.geodeticSurfaceNormal(p, cartesianToCartographicN);
-        var h = Cartesian3.subtract(cartesian, p, cartesianToCartographicH);
-
-        var longitude = Math.atan2(n.y, n.x);
-        var latitude = Math.asin(n.z);
-        var height = CesiumMath.sign(Cartesian3.dot(h, cartesian)) * Cartesian3.magnitude(h);
-
-        if (!defined(result)) {
-            return new Cartographic(longitude, latitude, height);
-        }
-        result.longitude = longitude;
-        result.latitude = latitude;
-        result.height = height;
-        return result;
-    };
-
-    /**
-     * Converts the provided array of cartesians to an array of cartographics.
-     * @memberof Ellipsoid
-     *
-     * @param {Array} cartesians An array of Cartesian positions.
-     * @param {Array} [result] The object onto which to store the result.
-     * @returns {Array} The modified result parameter or a new Array instance if none was provided.
-     *
-     * @example
-     * //Create an array of Cartesians and determine their Cartographic representation on a WGS84 ellipsoid.
-     * var positions = [new Cesium.Cartesian(17832.12, 83234.52, 952313.73),
-     *                  new Cesium.Cartesian(17832.13, 83234.53, 952313.73),
-     *                  new Cesium.Cartesian(17832.14, 83234.54, 952313.73)]
-     * var cartographicPositions = Cesium.Ellipsoid.WGS84.cartesianArrayToCartographicArray(positions);
-     */
-    Ellipsoid.prototype.cartesianArrayToCartographicArray = function(cartesians, result) {
-                if (!defined(cartesians)) {
-            throw new DeveloperError('cartesians is required.');
-        }
-        
-        var length = cartesians.length;
-        if (!defined(result)) {
-            result = new Array(length);
-        } else {
-            result.length = length;
-        }
-        for ( var i = 0; i < length; ++i) {
-            result[i] = this.cartesianToCartographic(cartesians[i], result[i]);
-        }
-        return result;
-    };
-
-    var scaleToGeodeticSurfaceIntersection = new Cartesian3();
-    var scaleToGeodeticSurfaceGradient = new Cartesian3();
-
-    /**
-     * Scales the provided Cartesian position along the geodetic surface normal
-     * so that it is on the surface of this ellipsoid.  If the position is
-     * at the center of the ellipsoid, this function returns undefined.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} cartesian The Cartesian position to scale.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter, a new Cartesian3 instance if none was provided, or undefined if the position is at the center.
-     */
-    Ellipsoid.prototype.scaleToGeodeticSurface = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required.');
-        }
-        
-        var positionX = cartesian.x;
-        var positionY = cartesian.y;
-        var positionZ = cartesian.z;
-
-        var oneOverRadii = this._oneOverRadii;
-        var oneOverRadiiX = oneOverRadii.x;
-        var oneOverRadiiY = oneOverRadii.y;
-        var oneOverRadiiZ = oneOverRadii.z;
-
-        var x2 = positionX * positionX * oneOverRadiiX * oneOverRadiiX;
-        var y2 = positionY * positionY * oneOverRadiiY * oneOverRadiiY;
-        var z2 = positionZ * positionZ * oneOverRadiiZ * oneOverRadiiZ;
-
-        // Compute the squared ellipsoid norm.
-        var squaredNorm = x2 + y2 + z2;
-        var ratio = Math.sqrt(1.0 / squaredNorm);
-
-        // As an initial approximation, assume that the radial intersection is the projection point.
-        var intersection = Cartesian3.multiplyByScalar(cartesian, ratio, scaleToGeodeticSurfaceIntersection);
-
-        //* If the position is near the center, the iteration will not converge.
-        if (squaredNorm < this._centerToleranceSquared) {
-            return !isFinite(ratio) ? undefined : Cartesian3.clone(intersection, result);
-        }
-
-        var oneOverRadiiSquared = this._oneOverRadiiSquared;
-        var oneOverRadiiSquaredX = oneOverRadiiSquared.x;
-        var oneOverRadiiSquaredY = oneOverRadiiSquared.y;
-        var oneOverRadiiSquaredZ = oneOverRadiiSquared.z;
-
-        // Use the gradient at the intersection point in place of the true unit normal.
-        // The difference in magnitude will be absorbed in the multiplier.
-        var gradient = scaleToGeodeticSurfaceGradient;
-        gradient.x = intersection.x * oneOverRadiiSquaredX * 2.0;
-        gradient.y = intersection.y * oneOverRadiiSquaredY * 2.0;
-        gradient.z = intersection.z * oneOverRadiiSquaredZ * 2.0;
-
-        // Compute the initial guess at the normal vector multiplier, lambda.
-        var lambda = (1.0 - ratio) * Cartesian3.magnitude(cartesian) / (0.5 * Cartesian3.magnitude(gradient));
-        var correction = 0.0;
-
-        var func;
-        var denominator;
-        var xMultiplier;
-        var yMultiplier;
-        var zMultiplier;
-        var xMultiplier2;
-        var yMultiplier2;
-        var zMultiplier2;
-        var xMultiplier3;
-        var yMultiplier3;
-        var zMultiplier3;
-
-        do {
-            lambda -= correction;
-
-            xMultiplier = 1.0 / (1.0 + lambda * oneOverRadiiSquaredX);
-            yMultiplier = 1.0 / (1.0 + lambda * oneOverRadiiSquaredY);
-            zMultiplier = 1.0 / (1.0 + lambda * oneOverRadiiSquaredZ);
-
-            xMultiplier2 = xMultiplier * xMultiplier;
-            yMultiplier2 = yMultiplier * yMultiplier;
-            zMultiplier2 = zMultiplier * zMultiplier;
-
-            xMultiplier3 = xMultiplier2 * xMultiplier;
-            yMultiplier3 = yMultiplier2 * yMultiplier;
-            zMultiplier3 = zMultiplier2 * zMultiplier;
-
-            func = x2 * xMultiplier2 + y2 * yMultiplier2 + z2 * zMultiplier2 - 1.0;
-
-            // "denominator" here refers to the use of this expression in the velocity and acceleration
-            // computations in the sections to follow.
-            denominator = x2 * xMultiplier3 * oneOverRadiiSquaredX + y2 * yMultiplier3 * oneOverRadiiSquaredY + z2 * zMultiplier3 * oneOverRadiiSquaredZ;
-
-            var derivative = -2.0 * denominator;
-
-            correction = func / derivative;
-        } while (Math.abs(func) > CesiumMath.EPSILON12);
-
-        if (!defined(result)) {
-            return new Cartesian3(positionX * xMultiplier, positionY * yMultiplier, positionZ * zMultiplier);
-        }
-        result.x = positionX * xMultiplier;
-        result.y = positionY * yMultiplier;
-        result.z = positionZ * zMultiplier;
-        return result;
-    };
-
-    /**
-     * Scales the provided Cartesian position along the geocentric surface normal
-     * so that it is on the surface of this ellipsoid.
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} cartesian The Cartesian position to scale.
-     * @param {Cartesian3} [result] The object onto which to store the result.
-     * @returns {Cartesian3} The modified result parameter or a new Cartesian3 instance if none was provided.
-     */
-    Ellipsoid.prototype.scaleToGeocentricSurface = function(cartesian, result) {
-                if (!defined(cartesian)) {
-            throw new DeveloperError('cartesian is required.');
-        }
-        
-        var positionX = cartesian.x;
-        var positionY = cartesian.y;
-        var positionZ = cartesian.z;
-        var oneOverRadiiSquared = this._oneOverRadiiSquared;
-
-        var beta = 1.0 / Math.sqrt((positionX * positionX) * oneOverRadiiSquared.x +
-                                   (positionY * positionY) * oneOverRadiiSquared.y +
-                                   (positionZ * positionZ) * oneOverRadiiSquared.z);
-
-        return Cartesian3.multiplyByScalar(cartesian, beta, result);
-    };
-
-    /**
-     * Transforms a Cartesian X, Y, Z position to the ellipsoid-scaled space by multiplying
-     * its components by the result of {@link Ellipsoid#oneOverRadii}.
-     *
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} position The position to transform.
-     * @param {Cartesian3} [result] The position to which to copy the result, or undefined to create and
-     *        return a new instance.
-     * @returns {Cartesian3} The position expressed in the scaled space.  The returned instance is the
-     *          one passed as the result parameter if it is not undefined, or a new instance of it is.
-     */
-    Ellipsoid.prototype.transformPositionToScaledSpace = function(position, result) {
-        return Cartesian3.multiplyComponents(position, this._oneOverRadii, result);
-    };
-
-    /**
-     * Transforms a Cartesian X, Y, Z position from the ellipsoid-scaled space by multiplying
-     * its components by the result of {@link Ellipsoid#radii}.
-     *
-     * @memberof Ellipsoid
-     *
-     * @param {Cartesian3} position The position to transform.
-     * @param {Cartesian3} [result] The position to which to copy the result, or undefined to create and
-     *        return a new instance.
-     * @returns {Cartesian3} The position expressed in the unscaled space.  The returned instance is the
-     *          one passed as the result parameter if it is not undefined, or a new instance of it is.
-     */
-    Ellipsoid.prototype.transformPositionFromScaledSpace = function(position, result) {
-        return Cartesian3.multiplyComponents(position, this._radii, result);
-    };
-
-    /**
-     * Compares this Ellipsoid against the provided Ellipsoid componentwise and returns
-     * <code>true</code> if they are equal, <code>false</code> otherwise.
-     * @memberof Ellipsoid
-     *
-     * @param {Ellipsoid} [right] The other Ellipsoid.
-     * @returns {Boolean} <code>true</code> if they are equal, <code>false</code> otherwise.
-     */
-    Ellipsoid.prototype.equals = function(right) {
-        return (this === right) ||
-               (defined(right) &&
-                Cartesian3.equals(this._radii, right._radii));
-    };
-
-    /**
-     * Creates a string representing this Ellipsoid in the format '(radii.x, radii.y, radii.z)'.
-     * @memberof Ellipsoid
-     *
-     * @returns {String} A string representing this ellipsoid in the format '(radii.x, radii.y, radii.z)'.
-     */
-    Ellipsoid.prototype.toString = function() {
-        return this._radii.toString();
-    };
-
-    return Ellipsoid;
-});
-
-/*global define*/
-define('Core/Fullscreen',['./defined'], function(defined) {
-    "use strict";
-
-    var _supportsFullscreen;
-    var _names = {
-        requestFullscreen : undefined,
-        exitFullscreen : undefined,
-        fullscreenEnabled : undefined,
-        fullscreenElement : undefined,
-        fullscreenchange : undefined,
-        fullscreenerror : undefined
-    };
-
-    /**
-     * Browser-independent functions for working with the standard fullscreen API.
-     *
-     * @exports Fullscreen
-     *
-     * @see <a href='http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html'>W3C Fullscreen Living Specification</a>
-     */
-    var Fullscreen = {};
-
-    /**
-     * Detects whether the browser supports the standard fullscreen API.
-     *
-     * @returns <code>true</code> if the browser supports the standard fullscreen API,
-     * <code>false</code> otherwise.
-     */
-    Fullscreen.supportsFullscreen = function() {
-        if (defined(_supportsFullscreen)) {
-            return _supportsFullscreen;
-        }
-
-        _supportsFullscreen = false;
-
-        var body = document.body;
-        if (typeof body.requestFullscreen === 'function') {
-            // go with the unprefixed, standard set of names
-            _names.requestFullscreen = 'requestFullscreen';
-            _names.exitFullscreen = 'exitFullscreen';
-            _names.fullscreenEnabled = 'fullscreenEnabled';
-            _names.fullscreenElement = 'fullscreenElement';
-            _names.fullscreenchange = 'fullscreenchange';
-            _names.fullscreenerror = 'fullscreenerror';
-            _supportsFullscreen = true;
-            return _supportsFullscreen;
-        }
-
-        //check for the correct combination of prefix plus the various names that browsers use
-        var prefixes = ['webkit', 'moz', 'o', 'ms', 'khtml'];
-        var name;
-        for ( var i = 0, len = prefixes.length; i < len; ++i) {
-            var prefix = prefixes[i];
-
-            // casing of Fullscreen differs across browsers
-            name = prefix + 'RequestFullscreen';
-            if (typeof body[name] === 'function') {
-                _names.requestFullscreen = name;
-                _supportsFullscreen = true;
-            } else {
-                name = prefix + 'RequestFullScreen';
-                if (typeof body[name] === 'function') {
-                    _names.requestFullscreen = name;
-                    _supportsFullscreen = true;
-                }
-            }
-
-            // disagreement about whether it's "exit" as per spec, or "cancel"
-            name = prefix + 'ExitFullscreen';
-            if (typeof document[name] === 'function') {
-                _names.exitFullscreen = name;
-            } else {
-                name = prefix + 'CancelFullScreen';
-                if (typeof document[name] === 'function') {
-                    _names.exitFullscreen = name;
-                }
-            }
-
-            // casing of Fullscreen differs across browsers
-            name = prefix + 'FullscreenEnabled';
-            if (defined(document[name])) {
-                _names.fullscreenEnabled = name;
-            } else {
-                name = prefix + 'FullScreenEnabled';
-                if (defined(document[name])) {
-                    _names.fullscreenEnabled = name;
-                }
-            }
-
-            // casing of Fullscreen differs across browsers
-            name = prefix + 'FullscreenElement';
-            if (defined(document[name])) {
-                _names.fullscreenElement = name;
-            } else {
-                name = prefix + 'FullScreenElement';
-                if (defined(document[name])) {
-                    _names.fullscreenElement = name;
-                }
-            }
-
-            // thankfully, event names are all lowercase per spec
-            name = prefix + 'fullscreenchange';
-            // event names do not have 'on' in the front, but the property on the document does
-            if (defined(document['on' + name])) {
-                //except on IE
-                if (prefix === 'ms') {
-                    name = 'MSFullscreenChange';
-                }
-                _names.fullscreenchange = name;
-            }
-
-            name = prefix + 'fullscreenerror';
-            if (defined(document['on' + name])) {
-                //except on IE
-                if (prefix === 'ms') {
-                    name = 'MSFullscreenError';
-                }
-                _names.fullscreenerror = name;
-            }
-        }
-
-        return _supportsFullscreen;
-    };
-
-    /**
-     * Asynchronously requests the browser to enter fullscreen mode on the given element.
-     * If fullscreen mode is not supported by the browser, does nothing.
-     *
-     * @param {Object} element The HTML element which will be placed into fullscreen mode.
-     *
-     * @example
-     * // Put the entire page into fullscreen.
-     * Cesium.Fullscreen.requestFullscreen(document.body)
-     *
-     * // Place only the Cesium canvas into fullscreen.
-     * Cesium.Fullscreen.requestFullscreen(scene.canvas)
-     */
-    Fullscreen.requestFullscreen = function(element) {
-        if (!Fullscreen.supportsFullscreen()) {
-            return;
-        }
-
-        element[_names.requestFullscreen]();
-    };
-
-    /**
-     * Asynchronously exits fullscreen mode.  If the browser is not currently
-     * in fullscreen, or if fullscreen mode is not supported by the browser, does nothing.
-     */
-    Fullscreen.exitFullscreen = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return;
-        }
-
-        document[_names.exitFullscreen]();
-    };
-
-    /**
-     * Determine whether the browser will allow an element to be made fullscreen, or not.
-     * For example, by default, iframes cannot go fullscreen unless the containing page
-     * adds an "allowfullscreen" attribute (or prefixed equivalent).
-     *
-     * @returns {Boolean} <code>true</code> if the browser is able to enter fullscreen mode,
-     * <code>false</code> if not, and <code>undefined</code> if the browser does not
-     * support fullscreen mode.
-     */
-    Fullscreen.isFullscreenEnabled = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return undefined;
-        }
-
-        return document[_names.fullscreenEnabled];
-    };
-
-    /**
-     * Gets the element that is currently fullscreen, if any.  To simply check if the
-     * browser is in fullscreen mode or not, use {@link Fullscreen#isFullscreen}.
-     *
-     * @returns {Object} the element that is currently fullscreen, or <code>null</code> if the browser is
-     * not in fullscreen mode, or <code>undefined</code> if the browser does not support fullscreen
-     * mode.
-     */
-    Fullscreen.getFullscreenElement = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return undefined;
-        }
-
-        return document[_names.fullscreenElement];
-    };
-
-    /**
-     * Determines if the browser is currently in fullscreen mode.
-     *
-     * @returns {Boolean} <code>true</code> if the browser is currently in fullscreen mode, <code>false</code>
-     * if it is not, or <code>undefined</code> if the browser does not support fullscreen mode.
-     */
-    Fullscreen.isFullscreen = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return undefined;
-        }
-
-        return Fullscreen.getFullscreenElement() !== null;
-    };
-
-    /**
-     * Gets the name of the event on the document that is fired when fullscreen is
-     * entered or exited.  This event name is intended for use with addEventListener.
-     *
-     * In your event handler, to determine if the browser is in fullscreen mode or not,
-     * use {@link Fullscreen#isFullscreen}.
-     *
-     * @returns {String} the name of the event that is fired when fullscreen is entered or
-     * exited, or <code>undefined</code> if fullscreen is not supported.
-     */
-    Fullscreen.getFullscreenChangeEventName = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return undefined;
-        }
-
-        return _names.fullscreenchange;
-    };
-
-    /**
-     * Gets the name of the event that is fired when a fullscreen error
-     * occurs.  This event name is intended for use with addEventListener.
-     *
-     * @returns {String} the name of the event that is fired when a fullscreen error occurs,
-     * or <code>undefined</code> if fullscreen is not supported.
-     */
-    Fullscreen.getFullscreenErrorEventName = function() {
-        if (!Fullscreen.supportsFullscreen()) {
-            return undefined;
-        }
-
-        return _names.fullscreenerror;
-    };
-
-    return Fullscreen;
-});
-/*global define*/
-define('Core/FeatureDetection',[
-        './defined',
-        './Fullscreen'
-    ], function(
-        defined,
-        Fullscreen) {
-    "use strict";
-
-    function extractVersion(versionString) {
-        var parts = versionString.split('.');
-        for ( var i = 0, len = parts.length; i < len; ++i) {
-            parts[i] = parseInt(parts[i], 10);
-        }
-        return parts;
+    let occludeePointInScaledSpace;
+    if (minimumHeight < 0.0) {
+      // Horizon culling point needs to be recomputed since the tile is at least partly under the ellipsoid.
+      const occluder = new TerrainEncoding.EllipsoidalOccluder(ellipsoid);
+      occludeePointInScaledSpace = occluder.computeHorizonCullingPointPossiblyUnderEllipsoid(
+        center,
+        positions,
+        minimumHeight
+      );
     }
 
-    var isChromeResult;
-    var chromeVersionResult;
-    function isChrome() {
-        if (!defined(isChromeResult)) {
-            var fields = (/ Chrome\/([\.0-9]+)/).exec(navigator.userAgent);
-            if (fields === null) {
-                isChromeResult = false;
-            } else {
-                isChromeResult = true;
-                chromeVersionResult = extractVersion(fields[1]);
-            }
-        }
+    let hMin = minimumHeight;
+    hMin = Math.min(
+      hMin,
+      findMinMaxSkirts(
+        parameters.westIndices,
+        parameters.westSkirtHeight,
+        heights,
+        uvs,
+        rectangle,
+        ellipsoid,
+        toENU,
+        minimum,
+        maximum
+      )
+    );
+    hMin = Math.min(
+      hMin,
+      findMinMaxSkirts(
+        parameters.southIndices,
+        parameters.southSkirtHeight,
+        heights,
+        uvs,
+        rectangle,
+        ellipsoid,
+        toENU,
+        minimum,
+        maximum
+      )
+    );
+    hMin = Math.min(
+      hMin,
+      findMinMaxSkirts(
+        parameters.eastIndices,
+        parameters.eastSkirtHeight,
+        heights,
+        uvs,
+        rectangle,
+        ellipsoid,
+        toENU,
+        minimum,
+        maximum
+      )
+    );
+    hMin = Math.min(
+      hMin,
+      findMinMaxSkirts(
+        parameters.northIndices,
+        parameters.northSkirtHeight,
+        heights,
+        uvs,
+        rectangle,
+        ellipsoid,
+        toENU,
+        minimum,
+        maximum
+      )
+    );
 
-        return isChromeResult;
+    const aaBox = new AxisAlignedBoundingBox.AxisAlignedBoundingBox(minimum, maximum, center);
+    const encoding = new TerrainEncoding.TerrainEncoding(
+      center,
+      aaBox,
+      hMin,
+      maximumHeight,
+      fromENU,
+      hasVertexNormals,
+      includeWebMercatorT,
+      includeGeodeticSurfaceNormals,
+      exaggeration,
+      exaggerationRelativeHeight
+    );
+    const vertexStride = encoding.stride;
+    const size =
+      quantizedVertexCount * vertexStride + edgeVertexCount * vertexStride;
+    const vertexBuffer = new Float32Array(size);
+
+    let bufferIndex = 0;
+    for (let j = 0; j < quantizedVertexCount; ++j) {
+      if (hasVertexNormals) {
+        const n = j * 2.0;
+        toPack.x = octEncodedNormals[n];
+        toPack.y = octEncodedNormals[n + 1];
+      }
+
+      bufferIndex = encoding.encode(
+        vertexBuffer,
+        bufferIndex,
+        positions[j],
+        uvs[j],
+        heights[j],
+        toPack,
+        webMercatorTs[j],
+        geodeticSurfaceNormals[j]
+      );
     }
 
-    function chromeVersion() {
-        return isChrome() && chromeVersionResult;
-    }
+    const edgeTriangleCount = Math.max(0, (edgeVertexCount - 4) * 2);
+    const indexBufferLength = parameters.indices.length + edgeTriangleCount * 3;
+    const indexBuffer = IndexDatatype.IndexDatatype.createTypedArray(
+      quantizedVertexCount + edgeVertexCount,
+      indexBufferLength
+    );
+    indexBuffer.set(parameters.indices, 0);
 
-    var isSafariResult;
-    var safariVersionResult;
-    function isSafari() {
-        if (!defined(isSafariResult)) {
-            // Chrome contains Safari in the user agent too
-            if (isChrome() || !(/ Safari\/[\.0-9]+/).test(navigator.userAgent)) {
-                isSafariResult = false;
-            } else {
-                var fields = (/ Version\/([\.0-9]+)/).exec(navigator.userAgent);
-                if (fields === null) {
-                    isSafariResult = false;
-                } else {
-                    isSafariResult = true;
-                    safariVersionResult = extractVersion(fields[1]);
-                }
-            }
-        }
+    const percentage = 0.0001;
+    const lonOffset = (maxLongitude - minLongitude) * percentage;
+    const latOffset = (maxLatitude - minLatitude) * percentage;
+    const westLongitudeOffset = -lonOffset;
+    const westLatitudeOffset = 0.0;
+    const eastLongitudeOffset = lonOffset;
+    const eastLatitudeOffset = 0.0;
+    const northLongitudeOffset = 0.0;
+    const northLatitudeOffset = latOffset;
+    const southLongitudeOffset = 0.0;
+    const southLatitudeOffset = -latOffset;
 
-        return isSafariResult;
-    }
+    // Add skirts.
+    let vertexBufferIndex = quantizedVertexCount * vertexStride;
+    addSkirt(
+      vertexBuffer,
+      vertexBufferIndex,
+      westIndicesSouthToNorth,
+      encoding,
+      heights,
+      uvs,
+      octEncodedNormals,
+      ellipsoid,
+      rectangle,
+      parameters.westSkirtHeight,
+      southMercatorY,
+      oneOverMercatorHeight,
+      westLongitudeOffset,
+      westLatitudeOffset
+    );
+    vertexBufferIndex += parameters.westIndices.length * vertexStride;
+    addSkirt(
+      vertexBuffer,
+      vertexBufferIndex,
+      southIndicesEastToWest,
+      encoding,
+      heights,
+      uvs,
+      octEncodedNormals,
+      ellipsoid,
+      rectangle,
+      parameters.southSkirtHeight,
+      southMercatorY,
+      oneOverMercatorHeight,
+      southLongitudeOffset,
+      southLatitudeOffset
+    );
+    vertexBufferIndex += parameters.southIndices.length * vertexStride;
+    addSkirt(
+      vertexBuffer,
+      vertexBufferIndex,
+      eastIndicesNorthToSouth,
+      encoding,
+      heights,
+      uvs,
+      octEncodedNormals,
+      ellipsoid,
+      rectangle,
+      parameters.eastSkirtHeight,
+      southMercatorY,
+      oneOverMercatorHeight,
+      eastLongitudeOffset,
+      eastLatitudeOffset
+    );
+    vertexBufferIndex += parameters.eastIndices.length * vertexStride;
+    addSkirt(
+      vertexBuffer,
+      vertexBufferIndex,
+      northIndicesWestToEast,
+      encoding,
+      heights,
+      uvs,
+      octEncodedNormals,
+      ellipsoid,
+      rectangle,
+      parameters.northSkirtHeight,
+      southMercatorY,
+      oneOverMercatorHeight,
+      northLongitudeOffset,
+      northLatitudeOffset
+    );
 
-    function safariVersion() {
-        return isSafari() && safariVersionResult;
-    }
+    TerrainProvider.addSkirtIndices(
+      westIndicesSouthToNorth,
+      southIndicesEastToWest,
+      eastIndicesNorthToSouth,
+      northIndicesWestToEast,
+      quantizedVertexCount,
+      indexBuffer,
+      parameters.indices.length
+    );
 
-    var isWebkitResult;
-    var webkitVersionResult;
-    function isWebkit() {
-        if (!defined(isWebkitResult)) {
-            var fields = (/ AppleWebKit\/([\.0-9]+)(\+?)/).exec(navigator.userAgent);
-            if (fields === null) {
-                isWebkitResult = false;
-            } else {
-                isWebkitResult = true;
-                webkitVersionResult = extractVersion(fields[1]);
-                webkitVersionResult.isNightly = !!fields[2];
-            }
-        }
+    transferableObjects.push(vertexBuffer.buffer, indexBuffer.buffer);
 
-        return isWebkitResult;
-    }
-
-    function webkitVersion() {
-        return isWebkit() && webkitVersionResult;
-    }
-
-    var isInternetExplorerResult;
-    var internetExplorerVersionResult;
-    function isInternetExplorer() {
-        if (!defined(isInternetExplorerResult)) {
-            var fields;
-            if (navigator.appName === 'Microsoft Internet Explorer') {
-                fields = /MSIE ([0-9]{1,}[\.0-9]{0,})/.exec(navigator.userAgent);
-                if (fields !== null) {
-                    isInternetExplorerResult = true;
-                    internetExplorerVersionResult = extractVersion(fields[1]);
-                }
-            } else if (navigator.appName === 'Netscape') {
-                fields = /Trident\/.*rv:([0-9]{1,}[\.0-9]{0,})/.exec(navigator.userAgent);
-                if (fields !== null) {
-                    isInternetExplorerResult = true;
-                    internetExplorerVersionResult = extractVersion(fields[1]);
-                }
-            } else {
-                isInternetExplorerResult = false;
-            }
-        }
-        return isInternetExplorerResult;
-    }
-
-    function internetExplorerVersion() {
-        return isInternetExplorer() && internetExplorerVersionResult;
-    }
-
-    /**
-     * A set of functions to detect whether the current browser supports
-     * various features.
-     *
-     * @exports FeatureDetection
-     */
-    var FeatureDetection = {
-        isChrome : isChrome,
-        chromeVersion : chromeVersion,
-        isSafari : isSafari,
-        safariVersion : safariVersion,
-        isWebkit : isWebkit,
-        webkitVersion : webkitVersion,
-        isInternetExplorer : isInternetExplorer,
-        internetExplorerVersion : internetExplorerVersion
+    return {
+      vertices: vertexBuffer.buffer,
+      indices: indexBuffer.buffer,
+      westIndicesSouthToNorth: westIndicesSouthToNorth,
+      southIndicesEastToWest: southIndicesEastToWest,
+      eastIndicesNorthToSouth: eastIndicesNorthToSouth,
+      northIndicesWestToEast: northIndicesWestToEast,
+      vertexStride: vertexStride,
+      center: center,
+      minimumHeight: minimumHeight,
+      maximumHeight: maximumHeight,
+      occludeePointInScaledSpace: occludeePointInScaledSpace,
+      encoding: encoding,
+      indexCountWithoutSkirts: parameters.indices.length,
     };
+  }
 
-    /**
-     * Detects whether the current browser supports the full screen standard.
-     *
-     * @returns true if the browser supports the full screen standard, false if not.
-     *
-     * @see Fullscreen
-     * @see <a href='http://dvcs.w3.org/hg/fullscreen/raw-file/tip/Overview.html'>W3C Fullscreen Living Specification</a>
-     */
-    FeatureDetection.supportsFullscreen = function() {
-        return Fullscreen.supportsFullscreen();
-    };
+  function findMinMaxSkirts(
+    edgeIndices,
+    edgeHeight,
+    heights,
+    uvs,
+    rectangle,
+    ellipsoid,
+    toENU,
+    minimum,
+    maximum
+  ) {
+    let hMin = Number.POSITIVE_INFINITY;
 
-    /**
-     * Detects whether the current browser supports typed arrays.
-     *
-     * @returns true if the browser supports typed arrays, false if not.
-     *
-     * @see <a href='http://www.khronos.org/registry/typedarray/specs/latest/'>Typed Array Specification</a>
-     */
-    FeatureDetection.supportsTypedArrays = function() {
-        return typeof ArrayBuffer !== 'undefined';
-    };
+    const north = rectangle.north;
+    const south = rectangle.south;
+    let east = rectangle.east;
+    const west = rectangle.west;
 
-    var supportsTransferringArrayBuffersResult;
-
-    /**
-     * Detects whether the current browser can transfer an ArrayBuffer
-     * to / from a web worker.
-     *
-     * @returns true if the browser can transfer ArrayBuffers; otherwise, false.
-     */
-    FeatureDetection.supportsTransferringArrayBuffers = function() {
-        if (!defined(supportsTransferringArrayBuffersResult)) {
-            if (!FeatureDetection.supportsTypedArrays()) {
-                supportsTransferringArrayBuffersResult = false;
-                return;
-            }
-
-            var arrayBuffer = new ArrayBuffer(1);
-            try {
-                /*global postMessage*/
-                postMessage({ value : arrayBuffer }, [arrayBuffer]);
-                supportsTransferringArrayBuffersResult = true;
-            } catch(e) {
-                supportsTransferringArrayBuffersResult = false;
-            }
-        }
-        return supportsTransferringArrayBuffersResult;
-    };
-
-    return FeatureDetection;
-});
-/*global define*/
-define('Workers/createTaskProcessorWorker',[
-        '../Core/defaultValue',
-        '../Core/defined'
-    ], function(
-        defaultValue,
-        defined) {
-    "use strict";
-
-    /**
-     * Creates an adapter function to allow a calculation function to operate as a Web Worker,
-     * paired with TaskProcessor, to receive tasks and return results.
-     *
-     * @exports createTaskProcessorWorker
-     *
-     * @param {Function} workerFunction A function that takes as input two arguments:
-     * a parameters object, and an array into which transferable result objects can be pushed,
-     * and returns as output a result object.
-     * @returns {Function} An adapter function that handles the interaction with TaskProcessor,
-     * specifically, task ID management and posting a response message containing the result.
-     *
-     * @example
-     * function doCalculation(parameters, transferableObjects) {
-     *   // calculate some result using the inputs in parameters
-     *   return result;
-     * }
-     *
-     * return Cesium.createTaskProcessorWorker(doCalculation);
-     * // the resulting function is compatible with TaskProcessor
-     *
-     * @see TaskProcessor
-     * @see <a href='http://www.w3.org/TR/workers/'>Web Workers</a>
-     * @see <a href='http://www.w3.org/TR/html5/common-dom-interfaces.html#transferable-objects'>Transferable objects</a>
-     */
-    var createTaskProcessorWorker = function(workerFunction) {
-        var postMessage;
-        var transferableObjects = [];
-        var responseMessage = {
-            id : undefined,
-            result : undefined,
-            error : undefined
-        };
-
-        return function(event) {
-            /*global self*/
-            var data = event.data;
-
-            transferableObjects.length = 0;
-            responseMessage.id = data.id;
-            responseMessage.error = undefined;
-            responseMessage.result = undefined;
-
-            try {
-                responseMessage.result = workerFunction(data.parameters, transferableObjects);
-            } catch (e) {
-                responseMessage.error = e;
-            }
-
-            if (!defined(postMessage)) {
-                postMessage = defaultValue(self.webkitPostMessage, self.postMessage);
-            }
-
-            try {
-                postMessage(responseMessage, transferableObjects);
-            } catch (e) {
-                // something went wrong trying to post the message, post a simpler
-                // error that we can be sure will be cloneable
-                responseMessage.result = undefined;
-                responseMessage.error = 'postMessage failed with error: ' + e + '\n  with responseMessage: ' + JSON.stringify(responseMessage);
-                postMessage(responseMessage);
-            }
-        };
-    };
-
-    return createTaskProcessorWorker;
-});
-/*global define*/
-define('Workers/createVerticesFromQuantizedTerrainMesh',[
-        '../Core/Cartesian3',
-        '../Core/Cartographic',
-        '../Core/Ellipsoid',
-        '../Core/FeatureDetection',
-        '../Core/Math',
-        './createTaskProcessorWorker'
-    ], function(
-        Cartesian3,
-        Cartographic,
-        Ellipsoid,
-        FeatureDetection,
-        CesiumMath,
-        createTaskProcessorWorker) {
-    "use strict";
-
-    var vertexStride = 6;
-    var maxShort = 32767;
-
-    var xIndex = 0;
-    var yIndex = 1;
-    var zIndex = 2;
-    var hIndex = 3;
-    var uIndex = 4;
-    var vIndex = 5;
-
-    var cartesian3Scratch = new Cartesian3();
-    var cartographicScratch = new Cartographic();
-
-    function createVerticesFromQuantizedTerrainMesh(parameters, transferableObjects) {
-        var quantizedVertices = parameters.quantizedVertices;
-        var quantizedVertexCount = quantizedVertices.length / 3;
-        var edgeVertexCount = parameters.westIndices.length + parameters.eastIndices.length +
-                              parameters.southIndices.length + parameters.northIndices.length;
-        var minimumHeight = parameters.minimumHeight;
-        var maximumHeight = parameters.maximumHeight;
-        var center = parameters.relativeToCenter;
-
-        var extent = parameters.extent;
-        var west = extent.west;
-        var south = extent.south;
-        var east = extent.east;
-        var north = extent.north;
-
-        var ellipsoid = Ellipsoid.clone(parameters.ellipsoid);
-
-        var uBuffer = quantizedVertices.subarray(0, quantizedVertexCount);
-        var vBuffer = quantizedVertices.subarray(quantizedVertexCount, 2 * quantizedVertexCount);
-        var heightBuffer = quantizedVertices.subarray(quantizedVertexCount * 2, 3 * quantizedVertexCount);
-
-        var vertexBuffer = new Float32Array(quantizedVertexCount * vertexStride + edgeVertexCount * vertexStride);
-
-        for (var i = 0, bufferIndex = 0; i < quantizedVertexCount; ++i, bufferIndex += vertexStride) {
-            var u = uBuffer[i] / maxShort;
-            var v = vBuffer[i] / maxShort;
-            var height = CesiumMath.lerp(minimumHeight, maximumHeight, heightBuffer[i] / maxShort);
-
-            cartographicScratch.longitude = CesiumMath.lerp(west, east, u);
-            cartographicScratch.latitude = CesiumMath.lerp(south, north, v);
-            cartographicScratch.height = height;
-
-            ellipsoid.cartographicToCartesian(cartographicScratch, cartesian3Scratch);
-
-            vertexBuffer[bufferIndex + xIndex] = cartesian3Scratch.x - center.x;
-            vertexBuffer[bufferIndex + yIndex] = cartesian3Scratch.y - center.y;
-            vertexBuffer[bufferIndex + zIndex] = cartesian3Scratch.z - center.z;
-            vertexBuffer[bufferIndex + hIndex] = height;
-            vertexBuffer[bufferIndex + uIndex] = u;
-            vertexBuffer[bufferIndex + vIndex] = v;
-        }
-
-        var edgeTriangleCount = Math.max(0, (edgeVertexCount - 4) * 2);
-        var indexBuffer = new Uint16Array(parameters.indices.length + edgeTriangleCount * 3);
-        indexBuffer.set(parameters.indices, 0);
-
-        // Add skirts.
-        var vertexBufferIndex = quantizedVertexCount * vertexStride;
-        var indexBufferIndex = parameters.indices.length;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.westIndices, center, ellipsoid, extent, parameters.westSkirtHeight, true);
-        vertexBufferIndex += parameters.westIndices.length * vertexStride;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.southIndices, center, ellipsoid, extent, parameters.southSkirtHeight, false);
-        vertexBufferIndex += parameters.southIndices.length * vertexStride;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.eastIndices, center, ellipsoid, extent, parameters.eastSkirtHeight, false);
-        vertexBufferIndex += parameters.eastIndices.length * vertexStride;
-        indexBufferIndex = addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, parameters.northIndices, center, ellipsoid, extent, parameters.northSkirtHeight, true);
-        vertexBufferIndex += parameters.northIndices.length * vertexStride;
-
-        if (FeatureDetection.supportsTransferringArrayBuffers()) {
-            transferableObjects.push(vertexBuffer.buffer);
-            transferableObjects.push(indexBuffer.buffer);
-        }
-
-        return {
-            vertices : vertexBuffer.buffer,
-            indices : indexBuffer.buffer
-        };
+    if (east < west) {
+      east += ComponentDatatype.CesiumMath.TWO_PI;
     }
 
-    function addSkirt(vertexBuffer, vertexBufferIndex, indexBuffer, indexBufferIndex, edgeVertices, center, ellipsoid, extent, skirtLength, isWestOrNorthEdge) {
-        var start, end, increment;
-        if (isWestOrNorthEdge) {
-            start = edgeVertices.length - 1;
-            end = -1;
-            increment = -1;
-        } else {
-            start = 0;
-            end = edgeVertices.length;
-            increment = 1;
-        }
+    const length = edgeIndices.length;
+    for (let i = 0; i < length; ++i) {
+      const index = edgeIndices[i];
+      const h = heights[index];
+      const uv = uvs[index];
 
-        var previousIndex = -1;
+      cartographicScratch.longitude = ComponentDatatype.CesiumMath.lerp(west, east, uv.x);
+      cartographicScratch.latitude = ComponentDatatype.CesiumMath.lerp(south, north, uv.y);
+      cartographicScratch.height = h - edgeHeight;
 
-        var vertexIndex = vertexBufferIndex / vertexStride;
+      const position = ellipsoid.cartographicToCartesian(
+        cartographicScratch,
+        cartesian3Scratch
+      );
+      Matrix2.Matrix4.multiplyByPoint(toENU, position, position);
 
-        for (var i = start; i !== end; i += increment) {
-            var index = edgeVertices[i];
-            var offset = index * vertexStride;
-            var u = vertexBuffer[offset + uIndex];
-            var v = vertexBuffer[offset + vIndex];
-            var h = vertexBuffer[offset + hIndex];
+      Matrix2.Cartesian3.minimumByComponent(position, minimum, minimum);
+      Matrix2.Cartesian3.maximumByComponent(position, maximum, maximum);
 
-            cartographicScratch.longitude = CesiumMath.lerp(extent.west, extent.east, u);
-            cartographicScratch.latitude = CesiumMath.lerp(extent.south, extent.north, v);
-            cartographicScratch.height = h - skirtLength;
+      hMin = Math.min(hMin, cartographicScratch.height);
+    }
+    return hMin;
+  }
 
-            var position = ellipsoid.cartographicToCartesian(cartographicScratch, cartesian3Scratch);
-            Cartesian3.subtract(position, center, position);
+  function addSkirt(
+    vertexBuffer,
+    vertexBufferIndex,
+    edgeVertices,
+    encoding,
+    heights,
+    uvs,
+    octEncodedNormals,
+    ellipsoid,
+    rectangle,
+    skirtLength,
+    southMercatorY,
+    oneOverMercatorHeight,
+    longitudeOffset,
+    latitudeOffset
+  ) {
+    const hasVertexNormals = defaultValue.defined(octEncodedNormals);
 
-            vertexBuffer[vertexBufferIndex++] = position.x;
-            vertexBuffer[vertexBufferIndex++] = position.y;
-            vertexBuffer[vertexBufferIndex++] = position.z;
-            vertexBuffer[vertexBufferIndex++] = cartographicScratch.height;
-            vertexBuffer[vertexBufferIndex++] = u;
-            vertexBuffer[vertexBufferIndex++] = v;
+    const north = rectangle.north;
+    const south = rectangle.south;
+    let east = rectangle.east;
+    const west = rectangle.west;
 
-            if (previousIndex !== -1) {
-                indexBuffer[indexBufferIndex++] = previousIndex;
-                indexBuffer[indexBufferIndex++] = vertexIndex - 1;
-                indexBuffer[indexBufferIndex++] = index;
-
-                indexBuffer[indexBufferIndex++] = vertexIndex - 1;
-                indexBuffer[indexBufferIndex++] = vertexIndex;
-                indexBuffer[indexBufferIndex++] = index;
-            }
-
-            previousIndex = index;
-            ++vertexIndex;
-        }
-
-        return indexBufferIndex;
+    if (east < west) {
+      east += ComponentDatatype.CesiumMath.TWO_PI;
     }
 
-    return createTaskProcessorWorker(createVerticesFromQuantizedTerrainMesh);
-});
-}());
+    const length = edgeVertices.length;
+    for (let i = 0; i < length; ++i) {
+      const index = edgeVertices[i];
+      const h = heights[index];
+      const uv = uvs[index];
+
+      cartographicScratch.longitude =
+        ComponentDatatype.CesiumMath.lerp(west, east, uv.x) + longitudeOffset;
+      cartographicScratch.latitude =
+        ComponentDatatype.CesiumMath.lerp(south, north, uv.y) + latitudeOffset;
+      cartographicScratch.height = h - skirtLength;
+
+      const position = ellipsoid.cartographicToCartesian(
+        cartographicScratch,
+        cartesian3Scratch
+      );
+
+      if (hasVertexNormals) {
+        const n = index * 2.0;
+        toPack.x = octEncodedNormals[n];
+        toPack.y = octEncodedNormals[n + 1];
+      }
+
+      let webMercatorT;
+      if (encoding.hasWebMercatorT) {
+        webMercatorT =
+          (WebMercatorProjection.WebMercatorProjection.geodeticLatitudeToMercatorAngle(
+            cartographicScratch.latitude
+          ) -
+            southMercatorY) *
+          oneOverMercatorHeight;
+      }
+
+      let geodeticSurfaceNormal;
+      if (encoding.hasGeodeticSurfaceNormals) {
+        geodeticSurfaceNormal = ellipsoid.geodeticSurfaceNormal(position);
+      }
+
+      vertexBufferIndex = encoding.encode(
+        vertexBuffer,
+        vertexBufferIndex,
+        position,
+        uv,
+        cartographicScratch.height,
+        toPack,
+        webMercatorT,
+        geodeticSurfaceNormal
+      );
+    }
+  }
+
+  function copyAndSort(typedArray, comparator) {
+    let copy;
+    if (typeof typedArray.slice === "function") {
+      copy = typedArray.slice();
+      if (typeof copy.sort !== "function") {
+        // Sliced typed array isn't sortable, so we can't use it.
+        copy = undefined;
+      }
+    }
+
+    if (!defaultValue.defined(copy)) {
+      copy = Array.prototype.slice.call(typedArray);
+    }
+
+    copy.sort(comparator);
+
+    return copy;
+  }
+  var createVerticesFromQuantizedTerrainMesh$1 = createTaskProcessorWorker(
+    createVerticesFromQuantizedTerrainMesh
+  );
+
+  return createVerticesFromQuantizedTerrainMesh$1;
+
+}));
+//# sourceMappingURL=createVerticesFromQuantizedTerrainMesh.js.map

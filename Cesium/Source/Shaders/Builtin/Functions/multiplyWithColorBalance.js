@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * DOC_TBA\n\
  *\n\
  * @name czm_multiplyWithColorBalance\n\
@@ -21,4 +18,3 @@ vec3 czm_multiplyWithColorBalance(vec3 left, vec3 right)\n\
     return ((leftLuminance + rightLuminance) / (2.0 * targetLuminance)) * target;\n\
 }\n\
 ";
-});

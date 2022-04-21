@@ -1,55 +1,56 @@
-/*global define*/
-define(['../Core/Enumeration'], function(Enumeration) {
-    "use strict";
+/**
+ * Indicates if the scene is viewed in 3D, 2D, or 2.5D Columbus view.
+ *
+ * @enum {Number}
+ * @see Scene#mode
+ */
+const SceneMode = {
+  /**
+   * Morphing between mode, e.g., 3D to 2D.
+   *
+   * @type {Number}
+   * @constant
+   */
+  MORPHING: 0,
 
-    /**
-     * DOC_TBA
-     *
-     * @exports SceneMode
-     */
-    var SceneMode = {
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0
-         */
-        SCENE2D : new Enumeration(0, 'SCENE2D', {
-            morphTime : 0.0
-        }),
+  /**
+   * Columbus View mode.  A 2.5D perspective view where the map is laid out
+   * flat and objects with non-zero height are drawn above it.
+   *
+   * @type {Number}
+   * @constant
+   */
+  COLUMBUS_VIEW: 1,
 
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 1
-         */
-        COLUMBUS_VIEW : new Enumeration(1, 'COLUMBUS_VIEW', {
-            morphTime : 0.0
-        }),
+  /**
+   * 2D mode.  The map is viewed top-down with an orthographic projection.
+   *
+   * @type {Number}
+   * @constant
+   */
+  SCENE2D: 2,
 
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 2
-         */
-        SCENE3D : new Enumeration(2, 'SCENE3D', {
-            morphTime : 1.0
-        }),
+  /**
+   * 3D mode.  A traditional 3D perspective view of the globe.
+   *
+   * @type {Number}
+   * @constant
+   */
+  SCENE3D: 3,
+};
 
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 3
-         */
-        MORPHING : new Enumeration(3, 'MORPHING')
-    };
-
-    return SceneMode;
-});
+/**
+ * Returns the morph time for the given scene mode.
+ *
+ * @param {SceneMode} value The scene mode
+ * @returns {Number} The morph time
+ */
+SceneMode.getMorphTime = function (value) {
+  if (value === SceneMode.SCENE3D) {
+    return 1.0;
+  } else if (value === SceneMode.MORPHING) {
+    return undefined;
+  }
+  return 0.0;
+};
+export default Object.freeze(SceneMode);

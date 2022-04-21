@@ -1,31 +1,66 @@
-/*global define*/
-define([
-        'Core/clone',
-        'Core/defaultValue',
-        'Scene/Scene',
-        'Specs/createCanvas'
-    ], function(
-        clone,
-        defaultValue,
-        Scene,
-        createCanvas) {
-    "use strict";
+import { Cartesian2 } from "../Source/Cesium.js";
+import { clone } from "../Source/Cesium.js";
+import { defaultValue } from "../Source/Cesium.js";
+import { defined } from "../Source/Cesium.js";
+import { Scene } from "../Source/Cesium.js";
+import createCanvas from "./createCanvas.js";
+import getWebGLStub from "./getWebGLStub.js";
 
-    function createScene(options) {
-        options = clone(defaultValue(options, {}));
-        options.webgl = clone(defaultValue(options.webgl, {}));
-        options.webgl.antialias = defaultValue(options.webgl.antialias, false);
-        var scene = new Scene(createCanvas(), options);
+function createScene(options) {
+  options = defaultValue(options, {});
 
-        // Add functions for test
-        scene.renderForSpecs = function(time) {
-            scene.initializeFrame();
-            scene.render(time);
-            return scene.context.readPixels();
-        };
+  // save the canvas so we don't try to clone an HTMLCanvasElement
+  const canvas = defined(options.canvas) ? options.canvas : createCanvas();
+  options.canvas = undefined;
 
-        return scene;
-    }
+  options = clone(options, true);
 
-    return createScene;
-});
+  options.canvas = canvas;
+  options.contextOptions = defaultValue(options.contextOptions, {});
+
+  const contextOptions = options.contextOptions;
+  contextOptions.webgl = defaultValue(contextOptions.webgl, {});
+  contextOptions.webgl.antialias = defaultValue(
+    contextOptions.webgl.antialias,
+    false
+  );
+  contextOptions.webgl.stencil = defaultValue(
+    contextOptions.webgl.stencil,
+    true
+  );
+  if (!!window.webglStub) {
+    contextOptions.getWebGLStub = getWebGLStub;
+  }
+
+  const scene = new Scene(options);
+  scene.highDynamicRange = false;
+
+  if (!!window.webglValidation) {
+    const context = scene.context;
+    context.validateShaderProgram = true;
+    context.validateFramebuffer = true;
+    context.logShaderCompilation = true;
+    context.throwOnWebGLError = true;
+  }
+
+  // Add functions for test
+  scene.destroyForSpecs = function () {
+    const canvas = this.canvas;
+    this.destroy();
+    document.body.removeChild(canvas);
+  };
+
+  scene.renderForSpecs = function (time) {
+    this.initializeFrame();
+    this.render(time);
+  };
+
+  scene.pickForSpecs = function () {
+    this.pick(new Cartesian2(0, 0));
+  };
+
+  scene.rethrowRenderErrors = defaultValue(options.rethrowRenderErrors, true);
+
+  return scene;
+}
+export default createScene;

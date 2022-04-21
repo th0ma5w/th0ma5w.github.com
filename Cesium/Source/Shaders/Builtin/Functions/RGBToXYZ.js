@@ -1,11 +1,8 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * Converts an RGB color to CIE Yxy.\n\
  * <p>The conversion is described in\n\
- * <a href=\"http://content.gpwiki.org/index.php/D3DBook:High-Dynamic_Range_Rendering#Luminance_Transform\">Luminance Transform</a>\n\
+ * {@link http://content.gpwiki.org/index.php/D3DBook:High-Dynamic_Range_Rendering#Luminance_Transform|Luminance Transform}\n\
  * </p>\n\
  * \n\
  * @name czm_RGBToXYZ\n\
@@ -33,4 +30,3 @@ vec3 czm_RGBToXYZ(vec3 rgb)\n\
     return Yxy;\n\
 }\n\
 ";
-});

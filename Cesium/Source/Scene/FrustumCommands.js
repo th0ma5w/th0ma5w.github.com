@@ -1,41 +1,30 @@
-/*global define*/
-define(['../Core/defaultValue'], function(defaultValue) {
-    "use strict";
+import defaultValue from "../Core/defaultValue.js";
+import Pass from "../Renderer/Pass.js";
 
-    /**
-     * Defines a list of commands whose geometry are bound by near and far distances from the camera.
-     * @alias FrustumCommands
-     * @constructor
-     *
-     * @param {Number} [near=0.0] The lower bound or closest distance from the camera.
-     * @param {Number} [far=0.0] The upper bound or farthest distance from the camera.
-     */
-    var FrustumCommands = function(near, far) {
-        /**
-         * The lower bound or closest distance from the camera.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.near = defaultValue(near, 0.0);
-        /**
-         * The upper bound or farthest distance from the camera.
-         * @type {Number}
-         * @default 0.0
-         */
-        this.far = defaultValue(far, 0.0);
-        /**
-         * The list of opaque commands.
-         * @type {Array}
-         * @default []
-         */
-        this.opaqueCommands = [];
-        /**
-         * The list of translucent commands.
-         * @type {Array}
-         * @default []
-         */
-        this.translucentCommands = [];
-    };
+/**
+ * Defines a list of commands whose geometry are bound by near and far distances from the camera.
+ * @alias FrustumCommands
+ * @constructor
+ *
+ * @param {Number} [near=0.0] The lower bound or closest distance from the camera.
+ * @param {Number} [far=0.0] The upper bound or farthest distance from the camera.
+ *
+ * @private
+ */
+function FrustumCommands(near, far) {
+  this.near = defaultValue(near, 0.0);
+  this.far = defaultValue(far, 0.0);
 
-    return FrustumCommands;
-});
+  const numPasses = Pass.NUMBER_OF_PASSES;
+  const commands = new Array(numPasses);
+  const indices = new Array(numPasses);
+
+  for (let i = 0; i < numPasses; ++i) {
+    commands[i] = [];
+    indices[i] = 0;
+  }
+
+  this.commands = commands;
+  this.indices = indices;
+}
+export default FrustumCommands;

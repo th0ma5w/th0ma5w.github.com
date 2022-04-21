@@ -1,99 +1,141 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=Edge,chrome=1">  <!-- Use Chrome Frame in IE -->
-    <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no">
-    <meta name="description" content="A polyline">
-    <meta name="cesium-sandcastle-labels" content="Geometries">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
+    />
+    <meta
+      name="description"
+      content="Draw polylines with various widths and materials."
+    />
+    <meta name="cesium-sandcastle-labels" content="Geometries" />
     <title>Cesium Demo</title>
     <script type="text/javascript" src="../Sandcastle-header.js"></script>
-    <script type="text/javascript" src="../../../ThirdParty/requirejs-2.1.9/require.js"></script>
-    <script type="text/javascript">
-    require.config({
-        baseUrl : '../../../Source',
-        waitSeconds : 60
-    });
+    <script
+      type="text/javascript"
+      src="../../../Build/CesiumUnminified/Cesium.js"
+      nomodule
+    ></script>
+    <script type="module" src="../load-cesium-es6.js"></script>
+  </head>
+  <body
+    class="sandcastle-loading"
+    data-sandcastle-bucket="bucket-requirejs.html"
+  >
+    <style>
+      @import url(../templates/bucket.css);
+    </style>
+    <div id="cesiumContainer" class="fullSize"></div>
+    <div id="loadingOverlay"><h1>Loading...</h1></div>
+    <div id="toolbar"></div>
+    <script id="cesium_sandcastle_script">
+      function startup(Cesium) {
+        "use strict";
+        //Sandcastle_Begin
+        const viewer = new Cesium.Viewer("cesiumContainer");
+
+        const redLine = viewer.entities.add({
+          name: "Red line on terrain",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([-75, 35, -125, 35]),
+            width: 5,
+            material: Cesium.Color.RED,
+            clampToGround: true,
+          },
+        });
+
+        const greenRhumbLine = viewer.entities.add({
+          name: "Green rhumb line",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([-75, 35, -125, 35]),
+            width: 5,
+            arcType: Cesium.ArcType.RHUMB,
+            material: Cesium.Color.GREEN,
+          },
+        });
+
+        const glowingLine = viewer.entities.add({
+          name: "Glowing blue line on the surface",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray([-75, 37, -125, 37]),
+            width: 10,
+            material: new Cesium.PolylineGlowMaterialProperty({
+              glowPower: 0.2,
+              taperPower: 0.5,
+              color: Cesium.Color.CORNFLOWERBLUE,
+            }),
+          },
+        });
+
+        const orangeOutlined = viewer.entities.add({
+          name:
+            "Orange line with black outline at height and following the surface",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+              -75,
+              39,
+              250000,
+              -125,
+              39,
+              250000,
+            ]),
+            width: 5,
+            material: new Cesium.PolylineOutlineMaterialProperty({
+              color: Cesium.Color.ORANGE,
+              outlineWidth: 2,
+              outlineColor: Cesium.Color.BLACK,
+            }),
+          },
+        });
+
+        const purpleArrow = viewer.entities.add({
+          name: "Purple straight arrow at height",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+              -75,
+              43,
+              500000,
+              -125,
+              43,
+              500000,
+            ]),
+            width: 10,
+            arcType: Cesium.ArcType.NONE,
+            material: new Cesium.PolylineArrowMaterialProperty(
+              Cesium.Color.PURPLE
+            ),
+          },
+        });
+
+        const dashedLine = viewer.entities.add({
+          name: "Blue dashed line",
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArrayHeights([
+              -75,
+              45,
+              500000,
+              -125,
+              45,
+              500000,
+            ]),
+            width: 4,
+            material: new Cesium.PolylineDashMaterialProperty({
+              color: Cesium.Color.CYAN,
+            }),
+          },
+        });
+
+        viewer.zoomTo(viewer.entities);
+        //Sandcastle_End
+        Sandcastle.finishedLoading();
+      }
+      if (typeof Cesium !== "undefined") {
+        window.startupCalled = true;
+        startup(Cesium);
+      }
     </script>
-</head>
-<body class="sandcastle-loading" data-sandcastle-bucket="bucket-requirejs.html" data-sandcastle-title="Cesium + require.js">
-<style>
-    @import url(../templates/bucket.css);
-</style>
-<div id="cesiumContainer" class="fullSize"></div>
-<div id="loadingOverlay"><h1>Loading...</h1></div>
-<div id="toolbar"></div>
-<script id="cesium_sandcastle_script">
-require(['Cesium'], function(Cesium) {
-    "use strict";
-    
-    var viewer = new Cesium.Viewer('cesiumContainer');
-    var scene = viewer.scene;
-    var primitives = scene.primitives;
-    var ellipsoid = viewer.centralBody.ellipsoid;
-          
-    // Create a glowing polyline
-    var positions = [];
-    for (var i = 0; i < 10; ++i) {
-        positions.push(ellipsoid.cartographicToCartesian(Cesium.Cartographic.fromDegrees(-100.0 + i, 36.0)));
-    }
-
-    primitives.add(new Cesium.Primitive({
-        geometryInstances : new Cesium.GeometryInstance({
-            geometry : new Cesium.PolylineGeometry({
-                positions : positions,
-                width : 10.0,
-                vertexFormat : Cesium.PolylineMaterialAppearance.VERTEX_FORMAT
-            })
-        }),
-        appearance : new Cesium.PolylineMaterialAppearance({
-            material : Cesium.Material.fromType(Cesium.Material.PolylineGlowType)
-        })
-    }));
-    
-    // Polyline with per segment color
-    positions = [];
-    var colors = [];
-    for (i = 0; i < 10; ++i) {
-        positions.push(ellipsoid.cartographicToCartesian(Cesium.Cartographic.fromDegrees(-100.0 + i, 35.0)));
-        colors.push(Cesium.Color.fromRandom({alpha : 1.0}));
-    }
-
-    primitives.add(new Cesium.Primitive({
-        geometryInstances : new Cesium.GeometryInstance({
-            geometry : new Cesium.PolylineGeometry({
-                positions : positions,
-                width : 10.0,
-                vertexFormat : Cesium.PolylineColorAppearance.VERTEX_FORMAT,
-                colors : colors
-            })
-        }),
-        appearance : new Cesium.PolylineColorAppearance()
-    }));
-    
-    // Polyline with per vertex color
-    positions = [];
-    colors = [];
-    for (i = 0; i < 10; ++i) {
-        positions.push(ellipsoid.cartographicToCartesian(Cesium.Cartographic.fromDegrees(-100.0 + i, 34.0)));
-        colors.push(Cesium.Color.fromRandom({alpha : 1.0}));
-    }
-
-    primitives.add(new Cesium.Primitive({
-        geometryInstances : new Cesium.GeometryInstance({
-            geometry : new Cesium.PolylineGeometry({
-                positions : positions,
-                width : 10.0,
-                vertexFormat : Cesium.PolylineColorAppearance.VERTEX_FORMAT,
-                colors : colors,
-                colorsPerVertex : true
-            })
-        }),
-        appearance : new Cesium.PolylineColorAppearance()
-    }));
-
-    Sandcastle.finishedLoading();
-});
-</script>
-</body>
+  </body>
 </html>

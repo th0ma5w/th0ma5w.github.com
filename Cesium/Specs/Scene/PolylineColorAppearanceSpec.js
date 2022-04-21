@@ -1,93 +1,77 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/PolylineColorAppearance',
-         'Scene/Appearance',
-         'Scene/Primitive',
-         'Core/Cartesian3',
-         'Core/Color',
-         'Core/GeometryInstance',
-         'Core/ColorGeometryInstanceAttribute',
-         'Core/PolylineGeometry',
-         'Renderer/ClearCommand',
-         'Specs/render',
-         'Specs/createContext',
-         'Specs/destroyContext',
-         'Specs/createFrameState',
-         'Specs/createCamera'
-     ], function(
-         PolylineColorAppearance,
-         Appearance,
-         Primitive,
-         Cartesian3,
-         Color,
-         GeometryInstance,
-         ColorGeometryInstanceAttribute,
-         PolylineGeometry,
-         ClearCommand,
-         render,
-         createContext,
-         destroyContext,
-         createFrameState,
-         createCamera) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { ArcType } from "../../Source/Cesium.js";
+import { Cartesian3 } from "../../Source/Cesium.js";
+import { Color } from "../../Source/Cesium.js";
+import { ColorGeometryInstanceAttribute } from "../../Source/Cesium.js";
+import { GeometryInstance } from "../../Source/Cesium.js";
+import { PolylineGeometry } from "../../Source/Cesium.js";
+import { Appearance } from "../../Source/Cesium.js";
+import { PolylineColorAppearance } from "../../Source/Cesium.js";
+import { Primitive } from "../../Source/Cesium.js";
+import createScene from "../createScene.js";
 
-    var context;
-    var us;
-    var frameState;
+describe(
+  "Scene/PolylineColorAppearance",
+  function () {
+    let scene;
+    let primitive;
 
-    beforeAll(function() {
-        context = createContext();
+    beforeAll(function () {
+      scene = createScene();
+      scene.primitives.destroyPrimitives = false;
     });
 
-    afterAll(function() {
-        destroyContext(context);
+    afterAll(function () {
+      scene.destroyForSpecs();
     });
 
-    beforeEach(function() {
-        frameState = createFrameState(createCamera(context));
-        us = context.getUniformState();
-        us.update(context, frameState);
+    afterEach(function () {
+      scene.primitives.removeAll();
+      primitive = primitive && !primitive.isDestroyed() && primitive.destroy();
     });
 
-    it('constructor', function() {
-        var a = new PolylineColorAppearance();
+    it("constructor", function () {
+      const a = new PolylineColorAppearance();
 
-        expect(a.material).not.toBeDefined();
-        expect(a.vertexShaderSource).toBeDefined();
-        expect(a.fragmentShaderSource).toBeDefined();
-        expect(a.renderState).toEqual(Appearance.getDefaultRenderState(true, false));
-        expect(a.vertexFormat).toEqual(PolylineColorAppearance.VERTEX_FORMAT);
-        expect(a.translucent).toEqual(true);
-        expect(a.closed).toEqual(false);
+      expect(a.material).not.toBeDefined();
+      expect(a.vertexShaderSource).toBeDefined();
+      expect(a.fragmentShaderSource).toBeDefined();
+      expect(a.renderState).toEqual(
+        Appearance.getDefaultRenderState(true, false)
+      );
+      expect(a.vertexFormat).toEqual(PolylineColorAppearance.VERTEX_FORMAT);
+      expect(a.translucent).toEqual(true);
+      expect(a.closed).toEqual(false);
     });
 
-    it('renders', function() {
-        var primitive = new Primitive({
-            geometryInstances : new GeometryInstance({
-                geometry : new PolylineGeometry({
-                    positions : [
-                        new Cartesian3(0.0, -1.0, 0.0),
-                        new Cartesian3(0.0, 1.0, 0.0)
-                    ],
-                    width : 10.0,
-                    vertexFormat : PolylineColorAppearance.VERTEX_FORMAT
-                }),
-                attributes : {
-                    color : ColorGeometryInstanceAttribute.fromColor(new Color(1.0, 1.0, 0.0, 1.0))
-                }
-            }),
-            appearance : new PolylineColorAppearance({
-                translucent : false
-            }),
-            asynchronous : false
-        });
+    it("renders", function () {
+      primitive = new Primitive({
+        geometryInstances: new GeometryInstance({
+          geometry: new PolylineGeometry({
+            positions: [
+              new Cartesian3(0.0, -1000000.0, 0.0),
+              new Cartesian3(0.0, 1000000.0, 0.0),
+            ],
+            width: 10.0,
+            vertexFormat: PolylineColorAppearance.VERTEX_FORMAT,
+            arcType: ArcType.NONE,
+          }),
+          attributes: {
+            color: ColorGeometryInstanceAttribute.fromColor(
+              new Color(1.0, 1.0, 0.0, 1.0)
+            ),
+          },
+        }),
+        appearance: new PolylineColorAppearance({
+          translucent: false,
+        }),
+        asynchronous: false,
+      });
 
-        ClearCommand.ALL.execute(context);
-        expect(context.readPixels()).toEqual([0, 0, 0, 0]);
+      expect(scene).toRender([0, 0, 0, 255]);
 
-        render(context, frameState, primitive);
-        expect(context.readPixels()).not.toEqual([0, 0, 0, 0]);
+      scene.primitives.add(primitive);
+      expect(scene).notToRender([0, 0, 0, 255]);
     });
-
-}, 'WebGL');
+  },
+  "WebGL"
+);

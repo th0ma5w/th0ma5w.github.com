@@ -1,83 +1,42 @@
-/*global define*/
-define(['../Core/Enumeration'], function(Enumeration) {
-    "use strict";
+import WebGLConstants from "../Core/WebGLConstants.js";
 
-    /**
-     * DOC_TBA
-     *
-     * @exports RenderbufferFormat
-     */
-    var RenderbufferFormat = {
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0x8056
-         */
-        RGBA4 : new Enumeration(0x8056, 'RGBA4'),
+/**
+ * @private
+ */
+const RenderbufferFormat = {
+  RGBA4: WebGLConstants.RGBA4,
+  RGBA8: WebGLConstants.RGBA8,
+  RGBA16F: WebGLConstants.RGBA16F,
+  RGBA32F: WebGLConstants.RGBA32F,
+  RGB5_A1: WebGLConstants.RGB5_A1,
+  RGB565: WebGLConstants.RGB565,
+  DEPTH_COMPONENT16: WebGLConstants.DEPTH_COMPONENT16,
+  STENCIL_INDEX8: WebGLConstants.STENCIL_INDEX8,
+  DEPTH_STENCIL: WebGLConstants.DEPTH_STENCIL,
+  DEPTH24_STENCIL8: WebGLConstants.DEPTH24_STENCIL8,
 
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0x8057
-         */
-        RGB5_A1 : new Enumeration(0x8057, 'RGB5_A1'),
+  validate: function (renderbufferFormat) {
+    return (
+      renderbufferFormat === RenderbufferFormat.RGBA4 ||
+      renderbufferFormat === RenderbufferFormat.RGBA8 ||
+      renderbufferFormat === RenderbufferFormat.RGBA16F ||
+      renderbufferFormat === RenderbufferFormat.RGBA32F ||
+      renderbufferFormat === RenderbufferFormat.RGB5_A1 ||
+      renderbufferFormat === RenderbufferFormat.RGB565 ||
+      renderbufferFormat === RenderbufferFormat.DEPTH_COMPONENT16 ||
+      renderbufferFormat === RenderbufferFormat.STENCIL_INDEX8 ||
+      renderbufferFormat === RenderbufferFormat.DEPTH_STENCIL ||
+      renderbufferFormat === RenderbufferFormat.DEPTH24_STENCIL8
+    );
+  },
 
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0x8D62
-         */
-        RGB565 : new Enumeration(0x8D62, 'RGB565'),
-
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0x81A5
-         */
-        DEPTH_COMPONENT16 : new Enumeration(0x81A5, 'DEPTH_COMPONENT16'),
-
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0x8D48
-         */
-        STENCIL_INDEX8 : new Enumeration(0x8D48, 'STENCIL_INDEX8'),
-
-        /**
-         * DOC_TBA
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 084F9
-         */
-        DEPTH_STENCIL : new Enumeration(0x84F9, 'DEPTH_STENCIL'),
-
-        /**
-         * DOC_TBA
-         *
-         * @param {RenderBufferFormat} renderbufferFormat
-         *
-         * @returns {Boolean}
-         */
-        validate : function(renderbufferFormat) {
-            return ((renderbufferFormat === RenderbufferFormat.RGBA4) ||
-                    (renderbufferFormat === RenderbufferFormat.RGB5_A1) ||
-                    (renderbufferFormat === RenderbufferFormat.RGB565) ||
-                    (renderbufferFormat === RenderbufferFormat.DEPTH_COMPONENT16) ||
-                    (renderbufferFormat === RenderbufferFormat.STENCIL_INDEX8) ||
-                    (renderbufferFormat === RenderbufferFormat.DEPTH_STENCIL));
-        }
-    };
-
-    return RenderbufferFormat;
-});
+  getColorFormat: function (datatype) {
+    if (datatype === WebGLConstants.FLOAT) {
+      return RenderbufferFormat.RGBA32F;
+    } else if (datatype === WebGLConstants.HALF_FLOAT_OES) {
+      return RenderbufferFormat.RGBA16F;
+    }
+    return RenderbufferFormat.RGBA8;
+  },
+};
+export default Object.freeze(RenderbufferFormat);

@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * A built-in GLSL floating-point constant for <code>pi/3</code>.\n\
  *\n\
  * @alias czm_piOverThree\n\
@@ -17,5 +14,5 @@
  * // Example\n\
  * float pi = 3.0 * czm_piOverThree;\n\
  */\n\
-const float czm_piOverThree = 1.0471975511965976;";
-});
+const float czm_piOverThree = 1.0471975511965976;\n\
+";

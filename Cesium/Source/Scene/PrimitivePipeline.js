@@ -1,554 +1,855 @@
-/*global define*/
-define([
-        '../Core/defined',
-        '../Core/defaultValue',
-        '../Core/Color',
-        '../Core/ComponentDatatype',
-        '../Core/DeveloperError',
-        '../Core/FeatureDetection',
-        '../Core/Geometry',
-        '../Core/GeometryAttribute',
-        '../Core/GeometryPipeline',
-        '../Core/Matrix4'
-    ], function(
-        defined,
-        defaultValue,
-        Color,
-        ComponentDatatype,
-        DeveloperError,
-        FeatureDetection,
-        Geometry,
-        GeometryAttribute,
-        GeometryPipeline,
-        Matrix4) {
-    "use strict";
+import BoundingSphere from "../Core/BoundingSphere.js";
+import ComponentDatatype from "../Core/ComponentDatatype.js";
+import defaultValue from "../Core/defaultValue.js";
+import defined from "../Core/defined.js";
+import DeveloperError from "../Core/DeveloperError.js";
+import Ellipsoid from "../Core/Ellipsoid.js";
+import GeographicProjection from "../Core/GeographicProjection.js";
+import Geometry from "../Core/Geometry.js";
+import GeometryAttribute from "../Core/GeometryAttribute.js";
+import GeometryAttributes from "../Core/GeometryAttributes.js";
+import GeometryPipeline from "../Core/GeometryPipeline.js";
+import IndexDatatype from "../Core/IndexDatatype.js";
+import Matrix4 from "../Core/Matrix4.js";
+import OffsetGeometryInstanceAttribute from "../Core/OffsetGeometryInstanceAttribute.js";
+import WebMercatorProjection from "../Core/WebMercatorProjection.js";
 
-    // Bail out if the browser doesn't support typed arrays, to prevent the setup function
-    // from failing, since we won't be able to create a WebGL context anyway.
-    if (!FeatureDetection.supportsTypedArrays()) {
-        return {};
+function transformToWorldCoordinates(
+  instances,
+  primitiveModelMatrix,
+  scene3DOnly
+) {
+  let toWorld = !scene3DOnly;
+  const length = instances.length;
+  let i;
+
+  if (!toWorld && length > 1) {
+    const modelMatrix = instances[0].modelMatrix;
+
+    for (i = 1; i < length; ++i) {
+      if (!Matrix4.equals(modelMatrix, instances[i].modelMatrix)) {
+        toWorld = true;
+        break;
+      }
+    }
+  }
+
+  if (toWorld) {
+    for (i = 0; i < length; ++i) {
+      if (defined(instances[i].geometry)) {
+        GeometryPipeline.transformToWorldCoordinates(instances[i]);
+      }
+    }
+  } else {
+    // Leave geometry in local coordinate system; auto update model-matrix.
+    Matrix4.multiplyTransformation(
+      primitiveModelMatrix,
+      instances[0].modelMatrix,
+      primitiveModelMatrix
+    );
+  }
+}
+
+function addGeometryBatchId(geometry, batchId) {
+  const attributes = geometry.attributes;
+  const positionAttr = attributes.position;
+  const numberOfComponents =
+    positionAttr.values.length / positionAttr.componentsPerAttribute;
+
+  attributes.batchId = new GeometryAttribute({
+    componentDatatype: ComponentDatatype.FLOAT,
+    componentsPerAttribute: 1,
+    values: new Float32Array(numberOfComponents),
+  });
+
+  const values = attributes.batchId.values;
+  for (let j = 0; j < numberOfComponents; ++j) {
+    values[j] = batchId;
+  }
+}
+
+function addBatchIds(instances) {
+  const length = instances.length;
+
+  for (let i = 0; i < length; ++i) {
+    const instance = instances[i];
+    if (defined(instance.geometry)) {
+      addGeometryBatchId(instance.geometry, i);
+    } else if (
+      defined(instance.westHemisphereGeometry) &&
+      defined(instance.eastHemisphereGeometry)
+    ) {
+      addGeometryBatchId(instance.westHemisphereGeometry, i);
+      addGeometryBatchId(instance.eastHemisphereGeometry, i);
+    }
+  }
+}
+
+function geometryPipeline(parameters) {
+  const instances = parameters.instances;
+  const projection = parameters.projection;
+  const uintIndexSupport = parameters.elementIndexUintSupported;
+  const scene3DOnly = parameters.scene3DOnly;
+  const vertexCacheOptimize = parameters.vertexCacheOptimize;
+  const compressVertices = parameters.compressVertices;
+  const modelMatrix = parameters.modelMatrix;
+
+  let i;
+  let geometry;
+  let primitiveType;
+  let length = instances.length;
+
+  for (i = 0; i < length; ++i) {
+    if (defined(instances[i].geometry)) {
+      primitiveType = instances[i].geometry.primitiveType;
+      break;
+    }
+  }
+
+  //>>includeStart('debug', pragmas.debug);
+  for (i = 1; i < length; ++i) {
+    if (
+      defined(instances[i].geometry) &&
+      instances[i].geometry.primitiveType !== primitiveType
+    ) {
+      throw new DeveloperError(
+        "All instance geometries must have the same primitiveType."
+      );
+    }
+  }
+  //>>includeEnd('debug');
+
+  // Unify to world coordinates before combining.
+  transformToWorldCoordinates(instances, modelMatrix, scene3DOnly);
+
+  // Clip to IDL
+  if (!scene3DOnly) {
+    for (i = 0; i < length; ++i) {
+      if (defined(instances[i].geometry)) {
+        GeometryPipeline.splitLongitude(instances[i]);
+      }
+    }
+  }
+
+  addBatchIds(instances);
+
+  // Optimize for vertex shader caches
+  if (vertexCacheOptimize) {
+    for (i = 0; i < length; ++i) {
+      const instance = instances[i];
+      if (defined(instance.geometry)) {
+        GeometryPipeline.reorderForPostVertexCache(instance.geometry);
+        GeometryPipeline.reorderForPreVertexCache(instance.geometry);
+      } else if (
+        defined(instance.westHemisphereGeometry) &&
+        defined(instance.eastHemisphereGeometry)
+      ) {
+        GeometryPipeline.reorderForPostVertexCache(
+          instance.westHemisphereGeometry
+        );
+        GeometryPipeline.reorderForPreVertexCache(
+          instance.westHemisphereGeometry
+        );
+
+        GeometryPipeline.reorderForPostVertexCache(
+          instance.eastHemisphereGeometry
+        );
+        GeometryPipeline.reorderForPreVertexCache(
+          instance.eastHemisphereGeometry
+        );
+      }
+    }
+  }
+
+  // Combine into single geometry for better rendering performance.
+  let geometries = GeometryPipeline.combineInstances(instances);
+
+  length = geometries.length;
+  for (i = 0; i < length; ++i) {
+    geometry = geometries[i];
+
+    // Split positions for GPU RTE
+    const attributes = geometry.attributes;
+    if (!scene3DOnly) {
+      for (const name in attributes) {
+        if (
+          attributes.hasOwnProperty(name) &&
+          attributes[name].componentDatatype === ComponentDatatype.DOUBLE
+        ) {
+          const name3D = `${name}3D`;
+          const name2D = `${name}2D`;
+
+          // Compute 2D positions
+          GeometryPipeline.projectTo2D(
+            geometry,
+            name,
+            name3D,
+            name2D,
+            projection
+          );
+          if (defined(geometry.boundingSphere) && name === "position") {
+            geometry.boundingSphereCV = BoundingSphere.fromVertices(
+              geometry.attributes.position2D.values
+            );
+          }
+
+          GeometryPipeline.encodeAttribute(
+            geometry,
+            name3D,
+            `${name3D}High`,
+            `${name3D}Low`
+          );
+          GeometryPipeline.encodeAttribute(
+            geometry,
+            name2D,
+            `${name2D}High`,
+            `${name2D}Low`
+          );
+        }
+      }
+    } else {
+      for (const name in attributes) {
+        if (
+          attributes.hasOwnProperty(name) &&
+          attributes[name].componentDatatype === ComponentDatatype.DOUBLE
+        ) {
+          GeometryPipeline.encodeAttribute(
+            geometry,
+            name,
+            `${name}3DHigh`,
+            `${name}3DLow`
+          );
+        }
+      }
     }
 
-    function transformToWorldCoordinates(instances, primitiveModelMatrix, allow3DOnly) {
-        var toWorld = !allow3DOnly;
-        var length = instances.length;
-        var i;
+    // oct encode and pack normals, compress texture coordinates
+    if (compressVertices) {
+      GeometryPipeline.compressVertices(geometry);
+    }
+  }
 
-        if (!toWorld && (length > 1)) {
-            var modelMatrix = instances[0].modelMatrix;
-
-            for (i = 1; i < length; ++i) {
-                if (!Matrix4.equals(modelMatrix, instances[i].modelMatrix)) {
-                    toWorld = true;
-                    break;
-                }
-            }
-        }
-
-        if (toWorld) {
-            for (i = 0; i < length; ++i) {
-                GeometryPipeline.transformToWorldCoordinates(instances[i]);
-            }
-        } else {
-            // Leave geometry in local coordinate system; auto update model-matrix.
-            Matrix4.clone(instances[0].modelMatrix, primitiveModelMatrix);
-        }
+  if (!uintIndexSupport) {
+    // Break into multiple geometries to fit within unsigned short indices if needed
+    let splitGeometries = [];
+    length = geometries.length;
+    for (i = 0; i < length; ++i) {
+      geometry = geometries[i];
+      splitGeometries = splitGeometries.concat(
+        GeometryPipeline.fitToUnsignedShortIndices(geometry)
+      );
     }
 
-    function addPickColorAttribute(instances, pickIds) {
-        var length = instances.length;
+    geometries = splitGeometries;
+  }
 
-        for (var i = 0; i < length; ++i) {
-            var instance = instances[i];
-            var geometry = instance.geometry;
-            var attributes = geometry.attributes;
-            var positionAttr = attributes.position;
-            var numberOfComponents = 4 * (positionAttr.values.length / positionAttr.componentsPerAttribute);
+  return geometries;
+}
 
-            attributes.pickColor = new GeometryAttribute({
-                componentDatatype : ComponentDatatype.UNSIGNED_BYTE,
-                componentsPerAttribute : 4,
-                normalize : true,
-                values : new Uint8Array(numberOfComponents)
-            });
+function createPickOffsets(instances, geometryName, geometries, pickOffsets) {
+  let offset;
+  let indexCount;
+  let geometryIndex;
 
-            var pickColor = pickIds[i];
-            var red = Color.floatToByte(pickColor.red);
-            var green = Color.floatToByte(pickColor.green);
-            var blue = Color.floatToByte(pickColor.blue);
-            var alpha = Color.floatToByte(pickColor.alpha);
-            var values = attributes.pickColor.values;
+  const offsetIndex = pickOffsets.length - 1;
+  if (offsetIndex >= 0) {
+    const pickOffset = pickOffsets[offsetIndex];
+    offset = pickOffset.offset + pickOffset.count;
+    geometryIndex = pickOffset.index;
+    indexCount = geometries[geometryIndex].indices.length;
+  } else {
+    offset = 0;
+    geometryIndex = 0;
+    indexCount = geometries[geometryIndex].indices.length;
+  }
 
-            for (var j = 0; j < numberOfComponents; j += 4) {
-                values[j] = red;
-                values[j + 1] = green;
-                values[j + 2] = blue;
-                values[j + 3] = alpha;
-            }
-        }
+  const length = instances.length;
+  for (let i = 0; i < length; ++i) {
+    const instance = instances[i];
+    const geometry = instance[geometryName];
+    if (!defined(geometry)) {
+      continue;
     }
 
-    function getCommonPerInstanceAttributeNames(instances) {
-        var length = instances.length;
+    const count = geometry.indices.length;
 
-        var attributesInAllInstances = [];
-        var attributes0 = instances[0].attributes;
-        var name;
-
-        for (name in attributes0) {
-            if (attributes0.hasOwnProperty(name)) {
-                var attribute = attributes0[name];
-                var inAllInstances = true;
-
-                // Does this same attribute exist in all instances?
-                for (var i = 1; i < length; ++i) {
-                    var otherAttribute = instances[i].attributes[name];
-
-                    if (!defined(otherAttribute) ||
-                        (attribute.componentDatatype.value !== otherAttribute.componentDatatype.value) ||
-                        (attribute.componentsPerAttribute !== otherAttribute.componentsPerAttribute) ||
-                        (attribute.normalize !== otherAttribute.normalize)) {
-
-                        inAllInstances = false;
-                        break;
-                    }
-                }
-
-                if (inAllInstances) {
-                    attributesInAllInstances.push(name);
-                }
-            }
-        }
-
-        return attributesInAllInstances;
+    if (offset + count > indexCount) {
+      offset = 0;
+      indexCount = geometries[++geometryIndex].indices.length;
     }
 
-    function addPerInstanceAttributes(instances, names) {
-        var length = instances.length;
-        for (var i = 0; i < length; ++i) {
-            var instance = instances[i];
-            var instanceAttributes = instance.attributes;
-            var geometry = instance.geometry;
-            var numberOfVertices = Geometry.computeNumberOfVertices(geometry);
+    pickOffsets.push({
+      index: geometryIndex,
+      offset: offset,
+      count: count,
+    });
+    offset += count;
+  }
+}
 
-            var namesLength = names.length;
-            for (var j = 0; j < namesLength; ++j) {
-                var name = names[j];
-                var attribute = instanceAttributes[name];
-                var componentDatatype = attribute.componentDatatype;
-                var value = attribute.value;
-                var componentsPerAttribute = value.length;
+function createInstancePickOffsets(instances, geometries) {
+  const pickOffsets = [];
+  createPickOffsets(instances, "geometry", geometries, pickOffsets);
+  createPickOffsets(
+    instances,
+    "westHemisphereGeometry",
+    geometries,
+    pickOffsets
+  );
+  createPickOffsets(
+    instances,
+    "eastHemisphereGeometry",
+    geometries,
+    pickOffsets
+  );
+  return pickOffsets;
+}
 
-                var buffer = ComponentDatatype.createTypedArray(componentDatatype, numberOfVertices * componentsPerAttribute);
-                for (var k = 0; k < numberOfVertices; ++k) {
-                    buffer.set(value, k * componentsPerAttribute);
-                }
+/**
+ * @private
+ */
+const PrimitivePipeline = {};
 
-                geometry.attributes[name] = new GeometryAttribute({
-                    componentDatatype : componentDatatype,
-                    componentsPerAttribute : componentsPerAttribute,
-                    normalize : attribute.normalize,
-                    values : buffer
-                });
-            }
-        }
+/**
+ * @private
+ */
+PrimitivePipeline.combineGeometry = function (parameters) {
+  let geometries;
+  let attributeLocations;
+  const instances = parameters.instances;
+  const length = instances.length;
+  let pickOffsets;
+
+  let offsetInstanceExtend;
+  let hasOffset = false;
+  if (length > 0) {
+    geometries = geometryPipeline(parameters);
+    if (geometries.length > 0) {
+      attributeLocations = GeometryPipeline.createAttributeLocations(
+        geometries[0]
+      );
+      if (parameters.createPickOffsets) {
+        pickOffsets = createInstancePickOffsets(instances, geometries);
+      }
+    }
+    if (
+      defined(instances[0].attributes) &&
+      defined(instances[0].attributes.offset)
+    ) {
+      offsetInstanceExtend = new Array(length);
+      hasOffset = true;
+    }
+  }
+
+  const boundingSpheres = new Array(length);
+  const boundingSpheresCV = new Array(length);
+  for (let i = 0; i < length; ++i) {
+    const instance = instances[i];
+    const geometry = instance.geometry;
+    if (defined(geometry)) {
+      boundingSpheres[i] = geometry.boundingSphere;
+      boundingSpheresCV[i] = geometry.boundingSphereCV;
+      if (hasOffset) {
+        offsetInstanceExtend[i] = instance.geometry.offsetAttribute;
+      }
     }
 
-    function geometryPipeline(parameters) {
-        var instances = parameters.instances;
-        var pickIds = parameters.pickIds;
-        var projection = parameters.projection;
-        var uintIndexSupport = parameters.elementIndexUintSupported;
-        var allow3DOnly = parameters.allow3DOnly;
-        var allowPicking = parameters.allowPicking;
-        var vertexCacheOptimize = parameters.vertexCacheOptimize;
-        var modelMatrix = parameters.modelMatrix;
+    const eastHemisphereGeometry = instance.eastHemisphereGeometry;
+    const westHemisphereGeometry = instance.westHemisphereGeometry;
+    if (defined(eastHemisphereGeometry) && defined(westHemisphereGeometry)) {
+      if (
+        defined(eastHemisphereGeometry.boundingSphere) &&
+        defined(westHemisphereGeometry.boundingSphere)
+      ) {
+        boundingSpheres[i] = BoundingSphere.union(
+          eastHemisphereGeometry.boundingSphere,
+          westHemisphereGeometry.boundingSphere
+        );
+      }
+      if (
+        defined(eastHemisphereGeometry.boundingSphereCV) &&
+        defined(westHemisphereGeometry.boundingSphereCV)
+      ) {
+        boundingSpheresCV[i] = BoundingSphere.union(
+          eastHemisphereGeometry.boundingSphereCV,
+          westHemisphereGeometry.boundingSphereCV
+        );
+      }
+    }
+  }
 
-        var i;
-        var length = instances.length;
-        var primitiveType = instances[0].geometry.primitiveType;
+  return {
+    geometries: geometries,
+    modelMatrix: parameters.modelMatrix,
+    attributeLocations: attributeLocations,
+    pickOffsets: pickOffsets,
+    offsetInstanceExtend: offsetInstanceExtend,
+    boundingSpheres: boundingSpheres,
+    boundingSpheresCV: boundingSpheresCV,
+  };
+};
 
-        //>>includeStart('debug', pragmas.debug);
-        for (i = 1; i < length; ++i) {
-            if (instances[i].geometry.primitiveType !== primitiveType) {
-                throw new DeveloperError('All instance geometries must have the same primitiveType.');
-            }
-        }
-        //>>includeEnd('debug');
+function transferGeometry(geometry, transferableObjects) {
+  const attributes = geometry.attributes;
+  for (const name in attributes) {
+    if (attributes.hasOwnProperty(name)) {
+      const attribute = attributes[name];
 
-        // Unify to world coordinates before combining.
-        transformToWorldCoordinates(instances, modelMatrix, allow3DOnly);
+      if (defined(attribute) && defined(attribute.values)) {
+        transferableObjects.push(attribute.values.buffer);
+      }
+    }
+  }
 
-        // Clip to IDL
-        if (!allow3DOnly) {
-            for (i = 0; i < length; ++i) {
-                GeometryPipeline.wrapLongitude(instances[i].geometry);
-            }
-        }
+  if (defined(geometry.indices)) {
+    transferableObjects.push(geometry.indices.buffer);
+  }
+}
 
-        // Add pickColor attribute for picking individual instances
-        if (allowPicking) {
-            addPickColorAttribute(instances, pickIds);
-        }
+function transferGeometries(geometries, transferableObjects) {
+  const length = geometries.length;
+  for (let i = 0; i < length; ++i) {
+    transferGeometry(geometries[i], transferableObjects);
+  }
+}
 
-        // add attributes to the geometry for each per-instance attribute
-        var perInstanceAttributeNames = getCommonPerInstanceAttributeNames(instances);
-        addPerInstanceAttributes(instances, perInstanceAttributeNames);
+// This function was created by simplifying packCreateGeometryResults into a count-only operation.
+function countCreateGeometryResults(items) {
+  let count = 1;
+  const length = items.length;
+  for (let i = 0; i < length; i++) {
+    const geometry = items[i];
+    ++count;
 
-        // Optimize for vertex shader caches
-        if (vertexCacheOptimize) {
-            for (i = 0; i < length; ++i) {
-                GeometryPipeline.reorderForPostVertexCache(instances[i].geometry);
-                GeometryPipeline.reorderForPreVertexCache(instances[i].geometry);
-            }
-        }
-
-        // Combine into single geometry for better rendering performance.
-        var geometry = GeometryPipeline.combine(instances);
-
-        // Split positions for GPU RTE
-        var attributes = geometry.attributes;
-        var name;
-        if (!allow3DOnly) {
-            for (name in attributes) {
-                if (attributes.hasOwnProperty(name) && attributes[name].componentDatatype.value === ComponentDatatype.DOUBLE.value) {
-                    var name3D = name + '3D';
-                    var name2D = name + '2D';
-
-                    // Compute 2D positions
-                    GeometryPipeline.projectTo2D(geometry, name, name3D, name2D, projection);
-
-                    GeometryPipeline.encodeAttribute(geometry, name3D, name3D + 'High', name3D + 'Low');
-                    GeometryPipeline.encodeAttribute(geometry, name2D, name2D + 'High', name2D + 'Low');
-                }
-            }
-        } else {
-            for (name in attributes) {
-                if (attributes.hasOwnProperty(name) && attributes[name].componentDatatype.value === ComponentDatatype.DOUBLE.value) {
-                    GeometryPipeline.encodeAttribute(geometry, name, name + '3DHigh', name + '3DLow');
-                }
-            }
-        }
-
-        if (!uintIndexSupport) {
-            // Break into multiple geometries to fit within unsigned short indices if needed
-            return GeometryPipeline.fitToUnsignedShortIndices(geometry);
-        }
-
-        // Unsigned int indices are supported.  No need to break into multiple geometries.
-        return [geometry];
+    if (!defined(geometry)) {
+      continue;
     }
 
-    function createPerInstanceVAAttributes(geometry, attributeLocations, names) {
-        var vaAttributes = [];
-        var attributes = geometry.attributes;
+    const attributes = geometry.attributes;
 
-        var length = names.length;
-        for (var i = 0; i < length; ++i) {
-            var name = names[i];
-            var attribute = attributes[name];
+    count +=
+      7 +
+      2 * BoundingSphere.packedLength +
+      (defined(geometry.indices) ? geometry.indices.length : 0);
 
-            var componentDatatype = attribute.componentDatatype;
-            if (componentDatatype.value === ComponentDatatype.DOUBLE.value) {
-                componentDatatype = ComponentDatatype.FLOAT;
-            }
+    for (const property in attributes) {
+      if (
+        attributes.hasOwnProperty(property) &&
+        defined(attributes[property])
+      ) {
+        const attribute = attributes[property];
+        count += 5 + attribute.values.length;
+      }
+    }
+  }
 
-            var typedArray = ComponentDatatype.createTypedArray(componentDatatype, attribute.values);
-            vaAttributes.push({
-                index : attributeLocations[name],
-                componentDatatype : componentDatatype,
-                componentsPerAttribute : attribute.componentsPerAttribute,
-                normalize : attribute.normalize,
-                values : typedArray
-            });
+  return count;
+}
 
-            delete attributes[name];
-        }
+/**
+ * @private
+ */
+PrimitivePipeline.packCreateGeometryResults = function (
+  items,
+  transferableObjects
+) {
+  const packedData = new Float64Array(countCreateGeometryResults(items));
+  const stringTable = [];
+  const stringHash = {};
 
-        return vaAttributes;
+  const length = items.length;
+  let count = 0;
+  packedData[count++] = length;
+  for (let i = 0; i < length; i++) {
+    const geometry = items[i];
+
+    const validGeometry = defined(geometry);
+    packedData[count++] = validGeometry ? 1.0 : 0.0;
+
+    if (!validGeometry) {
+      continue;
     }
 
-    function computePerInstanceAttributeLocations(instances, vertexArrays, attributeLocations) {
-        var indices = [];
+    packedData[count++] = geometry.primitiveType;
+    packedData[count++] = geometry.geometryType;
+    packedData[count++] = defaultValue(geometry.offsetAttribute, -1);
 
-        var names = getCommonPerInstanceAttributeNames(instances);
-        var length = instances.length;
-        var offsets = {};
-        var vaIndices = {};
-
-        for (var i = 0; i < length; ++i) {
-            var instance = instances[i];
-            var numberOfVertices = Geometry.computeNumberOfVertices(instance.geometry);
-
-            var namesLength = names.length;
-            for (var j = 0; j < namesLength; ++j) {
-                var name = names[j];
-                var index = attributeLocations[name];
-
-                var tempVertexCount = numberOfVertices;
-                while (tempVertexCount > 0) {
-                    var vaIndex = defaultValue(vaIndices[name], 0);
-                    var va = vertexArrays[vaIndex];
-                    var vaLength = va.length;
-
-                    var attribute;
-                    for (var k = 0; k < vaLength; ++k) {
-                        attribute = va[k];
-                        if (attribute.index === index) {
-                            break;
-                        }
-                    }
-
-                    if (!defined(indices[i])) {
-                        indices[i] = {};
-                    }
-
-                    if (!defined(indices[i][name])) {
-                        indices[i][name] = {
-                            dirty : false,
-                            value : instance.attributes[name].value,
-                            indices : []
-                        };
-                    }
-
-                    var size = attribute.values.length / attribute.componentsPerAttribute;
-                    var offset = defaultValue(offsets[name], 0);
-
-                    var count;
-                    if (offset + tempVertexCount < size) {
-                        count = tempVertexCount;
-                        indices[i][name].indices.push({
-                            attribute : attribute,
-                            offset : offset,
-                            count : count
-                        });
-                        offsets[name] = offset + tempVertexCount;
-                    } else {
-                        count = size - offset;
-                        indices[i][name].indices.push({
-                            attribute : attribute,
-                            offset : offset,
-                            count : count
-                        });
-                        offsets[name] = 0;
-                        vaIndices[name] = vaIndex + 1;
-                    }
-
-                    tempVertexCount -= count;
-                }
-            }
-        }
-
-        return indices;
+    const validBoundingSphere = defined(geometry.boundingSphere) ? 1.0 : 0.0;
+    packedData[count++] = validBoundingSphere;
+    if (validBoundingSphere) {
+      BoundingSphere.pack(geometry.boundingSphere, packedData, count);
     }
 
-    /**
-     * @private
-     */
-    var PrimitivePipeline = {};
+    count += BoundingSphere.packedLength;
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.combineGeometry = function(parameters) {
-        var clonedParameters = {
-            instances : parameters.instances,
-            pickIds : parameters.pickIds,
-            ellipsoid : parameters.ellipsoid,
-            projection : parameters.projection,
-            elementIndexUintSupported : parameters.elementIndexUintSupported,
-            allow3DOnly : parameters.allow3DOnly,
-            allowPicking : parameters.allowPicking,
-            vertexCacheOptimize : parameters.vertexCacheOptimize,
-            modelMatrix : Matrix4.clone(parameters.modelMatrix)
-        };
-        var geometries = geometryPipeline(clonedParameters);
-        var attributeLocations = GeometryPipeline.createAttributeLocations(geometries[0]);
-
-        var instances = clonedParameters.instances;
-        var perInstanceAttributeNames = getCommonPerInstanceAttributeNames(instances);
-
-        var perInstanceAttributes = [];
-        var length = geometries.length;
-        for (var i = 0; i < length; ++i) {
-            var geometry = geometries[i];
-            perInstanceAttributes.push(createPerInstanceVAAttributes(geometry, attributeLocations, perInstanceAttributeNames));
-        }
-
-        var indices = computePerInstanceAttributeLocations(instances, perInstanceAttributes, attributeLocations);
-
-        return {
-            geometries : geometries,
-            modelMatrix : clonedParameters.modelMatrix,
-            attributeLocations : attributeLocations,
-            vaAttributes : perInstanceAttributes,
-            vaAttributeLocations : indices
-        };
-    };
-
-    /*
-     * The below functions are needed when transferring typed arrays to/from web
-     * workers. This is a workaround for:
-     *
-     * https://bugzilla.mozilla.org/show_bug.cgi?id=841904
-     */
-
-    function stupefyTypedArray(typedArray) {
-        if (defined(typedArray.constructor.name)) {
-            return {
-                type : typedArray.constructor.name,
-                buffer : typedArray.buffer
-            };
-        } else {
-            return typedArray;
-        }
+    const validBoundingSphereCV = defined(geometry.boundingSphereCV)
+      ? 1.0
+      : 0.0;
+    packedData[count++] = validBoundingSphereCV;
+    if (validBoundingSphereCV) {
+      BoundingSphere.pack(geometry.boundingSphereCV, packedData, count);
     }
 
-    var typedArrayMap = {
-        Int8Array : Int8Array,
-        Uint8Array : Uint8Array,
-        Int16Array : Int16Array,
-        Uint16Array : Uint16Array,
-        Int32Array : Int32Array,
-        Uint32Array : Uint32Array,
-        Float32Array : Float32Array,
-        Float64Array : Float64Array
-    };
+    count += BoundingSphere.packedLength;
 
-    function unStupefyTypedArray(typedArray) {
-        if (defined(typedArray.type)) {
-            return new typedArrayMap[typedArray.type](typedArray.buffer);
-        } else {
-            return typedArray;
+    const attributes = geometry.attributes;
+    const attributesToWrite = [];
+    for (const property in attributes) {
+      if (
+        attributes.hasOwnProperty(property) &&
+        defined(attributes[property])
+      ) {
+        attributesToWrite.push(property);
+        if (!defined(stringHash[property])) {
+          stringHash[property] = stringTable.length;
+          stringTable.push(property);
         }
+      }
     }
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.transferGeometry = function(geometry, transferableObjects) {
-        var typedArray;
-        var attributes = geometry.attributes;
-        for (var name in attributes) {
-            if (attributes.hasOwnProperty(name) &&
-                    defined(attributes[name]) &&
-                    defined(attributes[name].values)) {
-                typedArray = attributes[name].values;
+    packedData[count++] = attributesToWrite.length;
+    for (let q = 0; q < attributesToWrite.length; q++) {
+      const name = attributesToWrite[q];
+      const attribute = attributes[name];
+      packedData[count++] = stringHash[name];
+      packedData[count++] = attribute.componentDatatype;
+      packedData[count++] = attribute.componentsPerAttribute;
+      packedData[count++] = attribute.normalize ? 1 : 0;
+      packedData[count++] = attribute.values.length;
+      packedData.set(attribute.values, count);
+      count += attribute.values.length;
+    }
 
-                if (FeatureDetection.supportsTransferringArrayBuffers() && transferableObjects.indexOf(attributes[name].values.buffer) < 0) {
-                    transferableObjects.push(typedArray.buffer);
-                }
+    const indicesLength = defined(geometry.indices)
+      ? geometry.indices.length
+      : 0;
+    packedData[count++] = indicesLength;
 
-                if (!defined(typedArray.type)) {
-                    attributes[name].values = stupefyTypedArray(typedArray);
-                }
-            }
-        }
+    if (indicesLength > 0) {
+      packedData.set(geometry.indices, count);
+      count += indicesLength;
+    }
+  }
 
-        if (defined(geometry.indices)) {
-            typedArray = geometry.indices;
+  transferableObjects.push(packedData.buffer);
 
-            if (FeatureDetection.supportsTransferringArrayBuffers()) {
-                transferableObjects.push(typedArray.buffer);
-            }
+  return {
+    stringTable: stringTable,
+    packedData: packedData,
+  };
+};
 
-            if (!defined(typedArray.type)) {
-                geometry.indices = stupefyTypedArray(geometry.indices);
-            }
-        }
+/**
+ * @private
+ */
+PrimitivePipeline.unpackCreateGeometryResults = function (
+  createGeometryResult
+) {
+  const stringTable = createGeometryResult.stringTable;
+  const packedGeometry = createGeometryResult.packedData;
+
+  let i;
+  const result = new Array(packedGeometry[0]);
+  let resultIndex = 0;
+
+  let packedGeometryIndex = 1;
+  while (packedGeometryIndex < packedGeometry.length) {
+    const valid = packedGeometry[packedGeometryIndex++] === 1.0;
+    if (!valid) {
+      result[resultIndex++] = undefined;
+      continue;
+    }
+
+    const primitiveType = packedGeometry[packedGeometryIndex++];
+    const geometryType = packedGeometry[packedGeometryIndex++];
+    let offsetAttribute = packedGeometry[packedGeometryIndex++];
+    if (offsetAttribute === -1) {
+      offsetAttribute = undefined;
+    }
+
+    let boundingSphere;
+    let boundingSphereCV;
+
+    const validBoundingSphere = packedGeometry[packedGeometryIndex++] === 1.0;
+    if (validBoundingSphere) {
+      boundingSphere = BoundingSphere.unpack(
+        packedGeometry,
+        packedGeometryIndex
+      );
+    }
+
+    packedGeometryIndex += BoundingSphere.packedLength;
+
+    const validBoundingSphereCV = packedGeometry[packedGeometryIndex++] === 1.0;
+    if (validBoundingSphereCV) {
+      boundingSphereCV = BoundingSphere.unpack(
+        packedGeometry,
+        packedGeometryIndex
+      );
+    }
+
+    packedGeometryIndex += BoundingSphere.packedLength;
+
+    let length;
+    let values;
+    let componentsPerAttribute;
+    const attributes = new GeometryAttributes();
+    const numAttributes = packedGeometry[packedGeometryIndex++];
+    for (i = 0; i < numAttributes; i++) {
+      const name = stringTable[packedGeometry[packedGeometryIndex++]];
+      const componentDatatype = packedGeometry[packedGeometryIndex++];
+      componentsPerAttribute = packedGeometry[packedGeometryIndex++];
+      const normalize = packedGeometry[packedGeometryIndex++] !== 0;
+
+      length = packedGeometry[packedGeometryIndex++];
+      values = ComponentDatatype.createTypedArray(componentDatatype, length);
+      for (let valuesIndex = 0; valuesIndex < length; valuesIndex++) {
+        values[valuesIndex] = packedGeometry[packedGeometryIndex++];
+      }
+
+      attributes[name] = new GeometryAttribute({
+        componentDatatype: componentDatatype,
+        componentsPerAttribute: componentsPerAttribute,
+        normalize: normalize,
+        values: values,
+      });
+    }
+
+    let indices;
+    length = packedGeometry[packedGeometryIndex++];
+
+    if (length > 0) {
+      const numberOfVertices = values.length / componentsPerAttribute;
+      indices = IndexDatatype.createTypedArray(numberOfVertices, length);
+      for (i = 0; i < length; i++) {
+        indices[i] = packedGeometry[packedGeometryIndex++];
+      }
+    }
+
+    result[resultIndex++] = new Geometry({
+      primitiveType: primitiveType,
+      geometryType: geometryType,
+      boundingSphere: boundingSphere,
+      boundingSphereCV: boundingSphereCV,
+      indices: indices,
+      attributes: attributes,
+      offsetAttribute: offsetAttribute,
+    });
+  }
+
+  return result;
+};
+
+function packInstancesForCombine(instances, transferableObjects) {
+  const length = instances.length;
+  const packedData = new Float64Array(1 + length * 19);
+  let count = 0;
+  packedData[count++] = length;
+  for (let i = 0; i < length; i++) {
+    const instance = instances[i];
+    Matrix4.pack(instance.modelMatrix, packedData, count);
+    count += Matrix4.packedLength;
+    if (defined(instance.attributes) && defined(instance.attributes.offset)) {
+      const values = instance.attributes.offset.value;
+      packedData[count] = values[0];
+      packedData[count + 1] = values[1];
+      packedData[count + 2] = values[2];
+    }
+    count += 3;
+  }
+  transferableObjects.push(packedData.buffer);
+
+  return packedData;
+}
+
+function unpackInstancesForCombine(data) {
+  const packedInstances = data;
+  const result = new Array(packedInstances[0]);
+  let count = 0;
+
+  let i = 1;
+  while (i < packedInstances.length) {
+    const modelMatrix = Matrix4.unpack(packedInstances, i);
+    let attributes;
+    i += Matrix4.packedLength;
+    if (defined(packedInstances[i])) {
+      attributes = {
+        offset: new OffsetGeometryInstanceAttribute(
+          packedInstances[i],
+          packedInstances[i + 1],
+          packedInstances[i + 2]
+        ),
+      };
+    }
+    i += 3;
+
+    result[count++] = {
+      modelMatrix: modelMatrix,
+      attributes: attributes,
     };
+  }
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.transferGeometries = function(geometries, transferableObjects) {
-        var length = geometries.length;
-        for (var i = 0; i < length; ++i) {
-            PrimitivePipeline.transferGeometry(geometries[i], transferableObjects);
-        }
-    };
+  return result;
+}
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.transferPerInstanceAttributes = function(perInstanceAttributes, transferableObjects) {
-        var length = perInstanceAttributes.length;
-        for (var i = 0; i < length; ++i) {
-            var vaAttributes = perInstanceAttributes[i];
-            var vaLength = vaAttributes.length;
-            for (var j = 0; j < vaLength; ++j) {
-                var typedArray = vaAttributes[j].values;
-                if (FeatureDetection.supportsTransferringArrayBuffers()) {
-                    transferableObjects.push(typedArray.buffer);
-                }
-                vaAttributes[j].values = stupefyTypedArray(typedArray);
-            }
-        }
-    };
+/**
+ * @private
+ */
+PrimitivePipeline.packCombineGeometryParameters = function (
+  parameters,
+  transferableObjects
+) {
+  const createGeometryResults = parameters.createGeometryResults;
+  const length = createGeometryResults.length;
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.transferInstances = function(instances, transferableObjects) {
-        var length = instances.length;
-        for (var i = 0; i < length; ++i) {
-            var instance = instances[i];
-            PrimitivePipeline.transferGeometry(instance.geometry, transferableObjects);
-        }
-    };
+  for (let i = 0; i < length; i++) {
+    transferableObjects.push(createGeometryResults[i].packedData.buffer);
+  }
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.receiveGeometry = function(geometry) {
-        var attributes = geometry.attributes;
-        for (var name in attributes) {
-            if (attributes.hasOwnProperty(name) &&
-                    defined(attributes[name]) &&
-                    defined(attributes[name].values)) {
-                attributes[name].values = unStupefyTypedArray(attributes[name].values);
-            }
-        }
+  return {
+    createGeometryResults: parameters.createGeometryResults,
+    packedInstances: packInstancesForCombine(
+      parameters.instances,
+      transferableObjects
+    ),
+    ellipsoid: parameters.ellipsoid,
+    isGeographic: parameters.projection instanceof GeographicProjection,
+    elementIndexUintSupported: parameters.elementIndexUintSupported,
+    scene3DOnly: parameters.scene3DOnly,
+    vertexCacheOptimize: parameters.vertexCacheOptimize,
+    compressVertices: parameters.compressVertices,
+    modelMatrix: parameters.modelMatrix,
+    createPickOffsets: parameters.createPickOffsets,
+  };
+};
 
-        if (defined(geometry.indices)) {
-            geometry.indices = unStupefyTypedArray(geometry.indices);
-        }
-    };
+/**
+ * @private
+ */
+PrimitivePipeline.unpackCombineGeometryParameters = function (
+  packedParameters
+) {
+  const instances = unpackInstancesForCombine(packedParameters.packedInstances);
+  const createGeometryResults = packedParameters.createGeometryResults;
+  const length = createGeometryResults.length;
+  let instanceIndex = 0;
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.receiveGeometries = function(geometries) {
-        var length = geometries.length;
-        for (var i = 0; i < length; ++i) {
-            PrimitivePipeline.receiveGeometry(geometries[i]);
-        }
-    };
+  for (let resultIndex = 0; resultIndex < length; resultIndex++) {
+    const geometries = PrimitivePipeline.unpackCreateGeometryResults(
+      createGeometryResults[resultIndex]
+    );
+    const geometriesLength = geometries.length;
+    for (
+      let geometryIndex = 0;
+      geometryIndex < geometriesLength;
+      geometryIndex++
+    ) {
+      const geometry = geometries[geometryIndex];
+      const instance = instances[instanceIndex];
+      instance.geometry = geometry;
+      ++instanceIndex;
+    }
+  }
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.receivePerInstanceAttributes = function(perInstanceAttributes) {
-        var length = perInstanceAttributes.length;
-        for (var i = 0; i < length; ++i) {
-            var vaAttributes = perInstanceAttributes[i];
-            var vaLength = vaAttributes.length;
-            for (var j = 0; j < vaLength; ++j) {
-                vaAttributes[j].values = unStupefyTypedArray(vaAttributes[j].values);
-            }
-        }
-    };
+  const ellipsoid = Ellipsoid.clone(packedParameters.ellipsoid);
+  const projection = packedParameters.isGeographic
+    ? new GeographicProjection(ellipsoid)
+    : new WebMercatorProjection(ellipsoid);
 
-    /**
-     * @private
-     */
-    PrimitivePipeline.receiveInstances = function(instances) {
-        var length = instances.length;
-        for (var i = 0; i < length; ++i) {
-            var instance = instances[i];
-            PrimitivePipeline.receiveGeometry(instance.geometry);
-        }
-    };
+  return {
+    instances: instances,
+    ellipsoid: ellipsoid,
+    projection: projection,
+    elementIndexUintSupported: packedParameters.elementIndexUintSupported,
+    scene3DOnly: packedParameters.scene3DOnly,
+    vertexCacheOptimize: packedParameters.vertexCacheOptimize,
+    compressVertices: packedParameters.compressVertices,
+    modelMatrix: Matrix4.clone(packedParameters.modelMatrix),
+    createPickOffsets: packedParameters.createPickOffsets,
+  };
+};
 
-    return PrimitivePipeline;
-});
+function packBoundingSpheres(boundingSpheres) {
+  const length = boundingSpheres.length;
+  const bufferLength = 1 + (BoundingSphere.packedLength + 1) * length;
+  const buffer = new Float32Array(bufferLength);
+
+  let bufferIndex = 0;
+  buffer[bufferIndex++] = length;
+
+  for (let i = 0; i < length; ++i) {
+    const bs = boundingSpheres[i];
+    if (!defined(bs)) {
+      buffer[bufferIndex++] = 0.0;
+    } else {
+      buffer[bufferIndex++] = 1.0;
+      BoundingSphere.pack(boundingSpheres[i], buffer, bufferIndex);
+    }
+    bufferIndex += BoundingSphere.packedLength;
+  }
+
+  return buffer;
+}
+
+function unpackBoundingSpheres(buffer) {
+  const result = new Array(buffer[0]);
+  let count = 0;
+
+  let i = 1;
+  while (i < buffer.length) {
+    if (buffer[i++] === 1.0) {
+      result[count] = BoundingSphere.unpack(buffer, i);
+    }
+    ++count;
+    i += BoundingSphere.packedLength;
+  }
+
+  return result;
+}
+
+/**
+ * @private
+ */
+PrimitivePipeline.packCombineGeometryResults = function (
+  results,
+  transferableObjects
+) {
+  if (defined(results.geometries)) {
+    transferGeometries(results.geometries, transferableObjects);
+  }
+
+  const packedBoundingSpheres = packBoundingSpheres(results.boundingSpheres);
+  const packedBoundingSpheresCV = packBoundingSpheres(
+    results.boundingSpheresCV
+  );
+  transferableObjects.push(
+    packedBoundingSpheres.buffer,
+    packedBoundingSpheresCV.buffer
+  );
+
+  return {
+    geometries: results.geometries,
+    attributeLocations: results.attributeLocations,
+    modelMatrix: results.modelMatrix,
+    pickOffsets: results.pickOffsets,
+    offsetInstanceExtend: results.offsetInstanceExtend,
+    boundingSpheres: packedBoundingSpheres,
+    boundingSpheresCV: packedBoundingSpheresCV,
+  };
+};
+
+/**
+ * @private
+ */
+PrimitivePipeline.unpackCombineGeometryResults = function (packedResult) {
+  return {
+    geometries: packedResult.geometries,
+    attributeLocations: packedResult.attributeLocations,
+    modelMatrix: packedResult.modelMatrix,
+    pickOffsets: packedResult.pickOffsets,
+    offsetInstanceExtend: packedResult.offsetInstanceExtend,
+    boundingSpheres: unpackBoundingSpheres(packedResult.boundingSpheres),
+    boundingSpheresCV: unpackBoundingSpheres(packedResult.boundingSpheresCV),
+  };
+};
+export default PrimitivePipeline;

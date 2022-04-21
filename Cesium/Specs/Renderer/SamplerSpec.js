@@ -1,61 +1,73 @@
-/*global defineSuite*/
-defineSuite([
-         'Specs/createContext',
-         'Specs/destroyContext'
-     ], 'Renderer/Sampler', function(
-         createContext,
-         destroyContext) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Sampler } from "../../Source/Cesium.js";
+import { TextureMinificationFilter } from "../../Source/Cesium.js";
+import { TextureWrap } from "../../Source/Cesium.js";
+import createContext from "../createContext.js";
 
-    var context;
+describe(
+  "Renderer/Sampler",
+  function () {
+    let context;
 
-    beforeAll(function() {
-        context = createContext();
+    beforeAll(function () {
+      context = createContext();
     });
 
-    afterAll(function() {
-        destroyContext(context);
+    afterAll(function () {
+      context.destroyForSpecs();
     });
 
-    it('throws when creating a sampler with invalid wrapS', function() {
-        expect(function() {
-            context.createSampler({
-                wrapS : 'invalid wrap'
-            });
-        }).toThrowDeveloperError();
+    it("has expected default values", function () {
+      const sampler = new Sampler();
+      expect(sampler.wrapS).toEqual(TextureWrap.CLAMP_TO_EDGE);
+      expect(sampler.wrapT).toEqual(TextureWrap.CLAMP_TO_EDGE);
+      expect(sampler.minificationFilter).toEqual(
+        TextureMinificationFilter.LINEAR
+      );
+      expect(sampler.magnificationFilter).toEqual(
+        TextureMinificationFilter.LINEAR
+      );
+      expect(sampler.maximumAnisotropy).toEqual(1.0);
     });
 
-    it('throws when creating a sampler with invalid wrapT', function() {
-        expect(function() {
-            context.createSampler({
-                wrapT : 'invalid wrap'
-            });
-        }).toThrowDeveloperError();
+    it("throws when creating a sampler with invalid wrapS", function () {
+      expect(function () {
+        return new Sampler({
+          wrapS: "invalid wrap",
+        });
+      }).toThrowDeveloperError();
     });
 
-    it('throws when creating a sampler with invalid minificationFilter', function() {
-        expect(function() {
-            context.createSampler({
-                minificationFilter : 'invalid filter'
-            });
-        }).toThrowDeveloperError();
+    it("throws when creating a sampler with invalid wrapT", function () {
+      expect(function () {
+        return new Sampler({
+          wrapT: "invalid wrap",
+        });
+      }).toThrowDeveloperError();
     });
 
-    it('throws when creating a sampler with invalid magnificationFilter', function() {
-        expect(function() {
-            context.createSampler({
-                magnificationFilter : 'invalid filter'
-            });
-        }).toThrowDeveloperError();
+    it("throws when creating a sampler with invalid minificationFilter", function () {
+      expect(function () {
+        return new Sampler({
+          minificationFilter: "invalid filter",
+        });
+      }).toThrowDeveloperError();
     });
 
-    it('throws when creating a sampler with invalid maximumAnisotropy', function() {
-        expect(function() {
-            context.createSampler({
-                maximumAnisotropy : 0.0
-            });
-        }).toThrowDeveloperError();
+    it("throws when creating a sampler with invalid magnificationFilter", function () {
+      expect(function () {
+        return new Sampler({
+          magnificationFilter: "invalid filter",
+        });
+      }).toThrowDeveloperError();
     });
 
-}, 'WebGL');
+    it("throws when creating a sampler with invalid maximumAnisotropy", function () {
+      expect(function () {
+        return new Sampler({
+          maximumAnisotropy: 0.0,
+        });
+      }).toThrowDeveloperError();
+    });
+  },
+  "WebGL"
+);

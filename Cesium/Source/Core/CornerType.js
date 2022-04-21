@@ -1,47 +1,37 @@
-/*global define*/
-define(['../Core/Enumeration'], function(Enumeration) {
-    "use strict";
+/**
+ * Style options for corners.
+ *
+ * @demo The {@link https://sandcastle.cesium.com/index.html?src=Corridor.html&label=Geometries|Corridor Demo}
+ * demonstrates the three corner types, as used by {@link CorridorGraphics}.
+ *
+ * @enum {Number}
+ */
+const CornerType = {
+  /**
+   * <img src="Images/CornerTypeRounded.png" style="vertical-align: middle;" width="186" height="189" />
+   *
+   * Corner has a smooth edge.
+   * @type {Number}
+   * @constant
+   */
+  ROUNDED: 0,
 
-    /**
-     * @exports CornerType
-     */
-    var CornerType = {
-        /**
-         *   ___
-         * (  ___
-         * | |
-         *
-         * Corner is circular.
-         * @type {Enumeration}
-         * @constant
-         * @default 0
-         */
-        ROUNDED : new Enumeration(0, 'ROUNDED'),
+  /**
+   * <img src="Images/CornerTypeMitered.png" style="vertical-align: middle;" width="186" height="189" />
+   *
+   * Corner point is the intersection of adjacent edges.
+   * @type {Number}
+   * @constant
+   */
+  MITERED: 1,
 
-        /**
-         *  ______
-         * |  ___
-         * | |
-         *
-         * Corner point is the intersection of adjacent edges.
-         * @type {Enumeration}
-         * @constant
-         * @default 1
-         */
-        MITERED : new Enumeration(1, 'MITERED'),
-
-        /**
-         *   ___
-         * /  ___
-         * | |
-         *
-         * Corner is clipped.
-         * @type {Enumeration}
-         * @constant
-         * @default 2
-         */
-        BEVELED : new Enumeration(2, 'BEVELED')
-    };
-
-    return CornerType;
-});
+  /**
+   * <img src="Images/CornerTypeBeveled.png" style="vertical-align: middle;" width="186" height="189" />
+   *
+   * Corner is clipped.
+   * @type {Number}
+   * @constant
+   */
+  BEVELED: 2,
+};
+export default Object.freeze(CornerType);

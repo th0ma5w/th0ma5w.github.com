@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "\n\
 varying vec2 v_textureCoordinates;\n\
 \n\
 void main()\n\
@@ -17,5 +14,5 @@ void main()\n\
     czm_material material = czm_getMaterial(materialInput);\n\
 \n\
     gl_FragColor = vec4(material.diffuse + material.emission, material.alpha);\n\
-}";
-});
+}\n\
+";

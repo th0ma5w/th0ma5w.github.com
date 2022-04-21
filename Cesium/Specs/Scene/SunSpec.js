@@ -1,165 +1,113 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/Sun',
-         'Specs/createCamera',
-         'Specs/createFrameState',
-         'Specs/createScene',
-         'Specs/destroyScene',
-         'Core/Cartesian3',
-         'Scene/SceneMode'
-     ], function(
-         Sun,
-         createCamera,
-         createFrameState,
-         createScene,
-         destroyScene,
-         Cartesian3,
-         SceneMode) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { BoundingSphere } from "../../Source/Cesium.js";
+import { Color } from "../../Source/Cesium.js";
+import { Math as CesiumMath } from "../../Source/Cesium.js";
+import { SceneMode } from "../../Source/Cesium.js";
+import { Sun } from "../../Source/Cesium.js";
+import createScene from "../createScene.js";
 
-    var scene;
+describe(
+  "Scene/Sun",
+  function () {
+    let scene;
+    const backgroundColor = [255, 0, 0, 255];
 
-    beforeAll(function() {
-        scene = createScene();
+    beforeAll(function () {
+      scene = createScene();
+      scene.backgroundColor = Color.unpack(backgroundColor);
     });
 
-    afterAll(function() {
-        destroyScene(scene);
+    afterAll(function () {
+      scene.destroyForSpecs();
     });
 
-    it('draws in 3D', function() {
-        scene.sun = new Sun();
-        scene.initializeFrame();
-        scene.render();
-
-        var us = scene.context.getUniformState();
-        var camera = scene.camera;
-
-        var sunPosition = us.getSunPositionWC();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        scene.initializeFrame();
-        scene.render();
-        expect(scene.context.readPixels()).toNotEqual([0, 0, 0, 0]);
+    beforeEach(function () {
+      scene.mode = SceneMode.SCENE3D;
     });
 
-    it('draws in Columbus view', function() {
-        scene.sun = new Sun();
-
-        scene.mode = SceneMode.COLUMBUS_VIEW;
-        scene.initializeFrame();
-        scene.render();
-
-        var us = scene.context.getUniformState();
-        var camera = scene.camera;
-
-        var sunPosition = us.getSunPositionColumbusView();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        scene.initializeFrame();
-        scene.render();
-        expect(scene.context.readPixels()).toNotEqual([0, 0, 0, 0]);
+    afterEach(function () {
+      scene.sun = undefined;
     });
 
-    it('does not render when show is false', function() {
-        var sun = new Sun();
-        sun.show = false;
+    function viewSun(camera, uniformState) {
+      const sunPosition = uniformState.sunPositionWC;
+      const bounds = new BoundingSphere(sunPosition, CesiumMath.SOLAR_RADIUS);
+      camera.viewBoundingSphere(bounds);
+    }
 
-        var context = scene.context;
+    it("draws in 3D", function () {
+      expect(scene).toRender(backgroundColor);
+      scene.sun = new Sun();
+      scene.sun.glowFactor = 100;
+      scene.render();
 
-        var frameState = createFrameState(createCamera(context, undefined, undefined, undefined, 1.0, 1.0e10));
-        var us = context.getUniformState();
-        us.update(context, frameState);
-
-        var sunPosition = us.getSunPositionWC();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        frameState.camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        us.update(context, frameState);
-
-        var command = sun.update(context, frameState);
-        expect(command).not.toBeDefined();
-
-        sun.destroy();
+      viewSun(scene.camera, scene.context.uniformState);
+      expect(scene).notToRender(backgroundColor);
     });
 
-    it('does not render in 2D', function() {
-        var sun = new Sun();
+    it("draws in Columbus view", function () {
+      expect(scene).toRender(backgroundColor);
+      scene.mode = SceneMode.COLUMBUS_VIEW;
+      scene.sun = new Sun();
+      scene.render();
 
-        var context = scene.context;
-
-        var frameState = createFrameState(createCamera(context, undefined, undefined, undefined, 1.0, 1.0e10));
-        frameState.mode = SceneMode.SCENE2D;
-        var us = context.getUniformState();
-        us.update(context, frameState);
-
-        var sunPosition = us.getSunPositionWC();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        frameState.camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        us.update(context, frameState);
-
-        var command = sun.update(context, frameState);
-        expect(command).not.toBeDefined();
-
-        sun.destroy();
+      viewSun(scene.camera, scene.context.uniformState);
+      expect(scene).notToRender(backgroundColor);
     });
 
-    it('does not render without a render pass', function() {
-        var sun = new Sun();
+    it("does not render when show is false", function () {
+      expect(scene).toRender(backgroundColor);
+      scene.sun = new Sun();
+      scene.render();
+      scene.sun.show = false;
 
-        var context = scene.context;
-
-        var frameState = createFrameState(createCamera(context, undefined, undefined, undefined, 1.0, 1.0e10));
-        frameState.passes.render = false;
-        var us = context.getUniformState();
-        us.update(context, frameState);
-
-        var sunPosition = us.getSunPositionWC();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        frameState.camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        us.update(context, frameState);
-
-        var command = sun.update(context, frameState);
-        expect(command).not.toBeDefined();
-
-        sun.destroy();
+      viewSun(scene.camera, scene.context.uniformState);
+      expect(scene).toRender(backgroundColor);
     });
 
-    it('can set glow factor', function() {
-        var sun = scene.sun = new Sun();
-        sun.glowFactor = 0.0;
-        expect(sun.glowFactor).toEqual(0.0);
-        sun.glowFactor = 2.0;
-        expect(sun.glowFactor).toEqual(2.0);
+    it("does not render in 2D", function () {
+      expect(scene).toRender(backgroundColor);
+      scene.mode = SceneMode.SCENE2D;
+      scene.sun = new Sun();
+      scene.render();
+
+      viewSun(scene.camera, scene.context.uniformState);
+      expect(scene).toRender(backgroundColor);
     });
 
-    it('draws without lens flare', function() {
-        scene.sun = new Sun();
-        scene.sun.glowFactor = 0.0;
-        scene.initializeFrame();
-        scene.render();
+    it("does not render without a render pass", function () {
+      scene.sun = new Sun();
+      scene.render();
 
-        var us = scene.context.getUniformState();
-        var camera = scene.camera;
-
-        var sunPosition = us.getSunPositionWC();
-        var cameraPosition = Cartesian3.multiplyByScalar(Cartesian3.normalize(sunPosition), 1e8);
-        camera.controller.lookAt(sunPosition, cameraPosition, Cartesian3.UNIT_Z);
-
-        scene.initializeFrame();
-        scene.render();
-        expect(scene.context.readPixels()).toNotEqual([0, 0, 0, 0]);
+      viewSun(scene.camera, scene.context.uniformState);
+      scene.frameState.passes.render = false;
+      const command = scene.sun.update(scene.frameState, scene.view.passState);
+      expect(command).not.toBeDefined();
     });
 
-    it('isDestroyed', function() {
-        var sun = new Sun();
-        expect(sun.isDestroyed()).toEqual(false);
-        sun.destroy();
-        expect(sun.isDestroyed()).toEqual(true);
+    it("can set glow factor", function () {
+      const sun = (scene.sun = new Sun());
+      sun.glowFactor = 0.0;
+      expect(sun.glowFactor).toEqual(0.0);
+      sun.glowFactor = 2.0;
+      expect(sun.glowFactor).toEqual(2.0);
     });
-}, 'WebGL');
+
+    it("draws without lens flare", function () {
+      expect(scene).toRender(backgroundColor);
+      scene.sun = new Sun();
+      scene.sun.glowFactor = 0.0;
+      scene.renderForSpecs();
+
+      viewSun(scene.camera, scene.context.uniformState);
+      expect(scene).notToRender(backgroundColor);
+    });
+
+    it("isDestroyed", function () {
+      const sun = new Sun();
+      expect(sun.isDestroyed()).toEqual(false);
+      sun.destroy();
+      expect(sun.isDestroyed()).toEqual(true);
+    });
+  },
+  "WebGL"
+);

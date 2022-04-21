@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "attribute vec3 position;\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "attribute vec3 position;\n\
 \n\
 varying vec3 v_texCoord;\n\
 \n\
@@ -13,4 +10,3 @@ void main()\n\
     v_texCoord = position.xyz;\n\
 }\n\
 ";
-});

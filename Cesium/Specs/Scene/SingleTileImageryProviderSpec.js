@@ -1,210 +1,232 @@
-/*global defineSuite*/
-defineSuite([
-         'Scene/SingleTileImageryProvider',
-         'Core/defined',
-         'Core/jsonp',
-         'Core/loadImage',
-         'Core/DefaultProxy',
-         'Core/Extent',
-         'Scene/GeographicTilingScheme',
-         'Scene/Imagery',
-         'Scene/ImageryLayer',
-         'Scene/ImageryProvider',
-         'Scene/ImageryState',
-         'ThirdParty/when'
-     ], function(
-         SingleTileImageryProvider,
-         defined,
-         jsonp,
-         loadImage,
-         DefaultProxy,
-         Extent,
-         GeographicTilingScheme,
-         Imagery,
-         ImageryLayer,
-         ImageryProvider,
-         ImageryState,
-         when) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Ellipsoid } from "../../Source/Cesium.js";
+import { GeographicTilingScheme } from "../../Source/Cesium.js";
+import { Rectangle } from "../../Source/Cesium.js";
+import { Request } from "../../Source/Cesium.js";
+import { Resource } from "../../Source/Cesium.js";
+import { Imagery } from "../../Source/Cesium.js";
+import { ImageryLayer } from "../../Source/Cesium.js";
+import { ImageryProvider } from "../../Source/Cesium.js";
+import { ImageryState } from "../../Source/Cesium.js";
+import { SingleTileImageryProvider } from "../../Source/Cesium.js";
+import pollToPromise from "../pollToPromise.js";
 
-    afterEach(function() {
-        jsonp.loadAndExecuteScript = jsonp.defaultLoadAndExecuteScript;
-        loadImage.createImage = loadImage.defaultCreateImage;
+describe("Scene/SingleTileImageryProvider", function () {
+  afterEach(function () {
+    Resource._Implementations.createImage =
+      Resource._DefaultImplementations.createImage;
+  });
+
+  it("conforms to ImageryProvider interface", function () {
+    expect(SingleTileImageryProvider).toConformToInterface(ImageryProvider);
+  });
+
+  it("resolves readyPromise", function () {
+    const provider = new SingleTileImageryProvider({
+      url: "Data/Images/Red16x16.png",
     });
 
-    it('conforms to ImageryProvider interface', function() {
-        expect(SingleTileImageryProvider).toConformToInterface(ImageryProvider);
+    return provider.readyPromise.then(function (result) {
+      expect(result).toBe(true);
+      expect(provider.ready).toBe(true);
+    });
+  });
+
+  it("resolves readyPromise with Resource", function () {
+    const resource = new Resource({
+      url: "Data/Images/Red16x16.png",
     });
 
-    it('properties are gettable', function() {
-        var url = 'Data/Images/Red16x16.png';
-        var extent = new Extent(0.1, 0.2, 0.3, 0.4);
-        var credit = 'hi';
-        var provider = new SingleTileImageryProvider({
-            url : url,
-            extent : extent,
-            credit : credit
-        });
-
-        expect(provider.url).toEqual(url);
-        expect(provider.extent).toEqual(extent);
-
-        waitsFor(function() {
-            return provider.ready;
-        }, 'imagery provider to become ready');
-
-        runs(function() {
-            expect(provider.tilingScheme).toBeInstanceOf(GeographicTilingScheme);
-            expect(provider.tilingScheme.extent).toEqual(extent);
-            expect(provider.tileWidth).toEqual(16);
-            expect(provider.tileHeight).toEqual(16);
-            expect(provider.maximumLevel).toEqual(0);
-            expect(provider.tileDiscardPolicy).toBeUndefined();
-        });
+    const provider = new SingleTileImageryProvider({
+      url: resource,
     });
 
-    it('url is required', function() {
-        function constructWithoutUrl() {
-            return new SingleTileImageryProvider({});
-        }
-        expect(constructWithoutUrl).toThrowDeveloperError();
+    return provider.readyPromise.then(function (result) {
+      expect(result).toBe(true);
+      expect(provider.ready).toBe(true);
+    });
+  });
+
+  it("rejects readyPromise on error", function () {
+    const provider = new SingleTileImageryProvider({
+      url: "invalid.image.url",
     });
 
-    it('requests the single image immediately upon construction', function() {
-        var imageUrl = 'Data/Images/Red16x16.png';
+    return provider.readyPromise
+      .then(function () {
+        fail("should not resolve");
+      })
+      .catch(function (e) {
+        expect(provider.ready).toBe(false);
+        expect(e.message).toContain(provider.url);
+      });
+  });
 
-        var calledCreateImage = false;
-        loadImage.createImage = function(url, crossOrigin, deferred) {
-            expect(url).toEqual(imageUrl);
-            calledCreateImage = true;
-            return loadImage.defaultCreateImage(url, crossOrigin, deferred);
-        };
-
-        var provider = new SingleTileImageryProvider({
-            url : imageUrl
-        });
-
-        expect(calledCreateImage).toEqual(true);
-
-        waitsFor(function() {
-            return provider.ready;
-        }, 'imagery provider to become ready');
-
-        var tile000Image;
-
-        runs(function() {
-            when(provider.requestImage(0, 0, 0), function(image) {
-                tile000Image = image;
-            }, 'requested tile to be loaded');
-        });
-
-        waitsFor(function() {
-            return defined(tile000Image);
-        });
-
-        runs(function() {
-            expect(tile000Image).toBeInstanceOf(Image);
-        });
+  it("returns valid value for hasAlphaChannel", function () {
+    const provider = new SingleTileImageryProvider({
+      url: "Data/Images/Red16x16.png",
     });
 
-    it('turns the supplied credit into a logo', function() {
-        var provider = new SingleTileImageryProvider({
-            url : 'Data/Images/Red16x16.png'
-        });
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      expect(typeof provider.hasAlphaChannel).toBe("boolean");
+    });
+  });
 
-        waitsFor(function() {
-            return provider.ready;
-        }, 'imagery provider to become ready');
-
-        var providerWithCredit;
-
-        runs(function() {
-            expect(provider.credit).toBeUndefined();
-
-            providerWithCredit = new SingleTileImageryProvider({
-                url : 'Data/Images/Red16x16.png',
-                credit : 'Thanks to our awesome made up source of this imagery!'
-            });
-        });
-
-        waitsFor(function() {
-            return providerWithCredit.ready;
-        }, 'imagery provider to become ready');
-
-        runs(function() {
-            expect(providerWithCredit.credit).toBeDefined();
-        });
+  it("properties are gettable", function () {
+    const url = "Data/Images/Red16x16.png";
+    const rectangle = new Rectangle(0.1, 0.2, 0.3, 0.4);
+    const credit = "hi";
+    const provider = new SingleTileImageryProvider({
+      url: url,
+      rectangle: rectangle,
+      credit: credit,
     });
 
-    it('routes requests through a proxy if one is specified', function() {
-        var calledCreateImage = false;
+    expect(provider.url).toEqual(url);
+    expect(provider.rectangle).toEqual(rectangle);
+    expect(provider.hasAlphaChannel).toEqual(true);
 
-        loadImage.createImage = function(url, crossOrigin, deferred) {
-            expect(url.indexOf(proxy.getURL('Data/Images/Red16x16.png'))).toEqual(0);
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      expect(provider.tilingScheme).toBeInstanceOf(GeographicTilingScheme);
+      expect(provider.tilingScheme.rectangle).toEqual(rectangle);
+      expect(provider.tileWidth).toEqual(16);
+      expect(provider.tileHeight).toEqual(16);
+      expect(provider.maximumLevel).toEqual(0);
+      expect(provider.tileDiscardPolicy).toBeUndefined();
+    });
+  });
 
-            calledCreateImage = true;
-            deferred.resolve();
-            return undefined;
-        };
+  it("url is required", function () {
+    function constructWithoutUrl() {
+      return new SingleTileImageryProvider({});
+    }
+    expect(constructWithoutUrl).toThrowDeveloperError();
+  });
 
-        var proxy = new DefaultProxy('/proxy/');
-        var provider = new SingleTileImageryProvider({
-            url : 'Data/Images/Red16x16.png',
-            proxy : proxy
-        });
-
-        expect(provider).toBeDefined();
-        expect(provider.proxy).toEqual(proxy);
-        expect(calledCreateImage).toEqual(true);
+  it("can use a custom ellipsoid", function () {
+    const ellipsoid = new Ellipsoid(1, 2, 3);
+    const provider = new SingleTileImageryProvider({
+      url: "Data/Images/Red16x16.png",
+      ellipsoid: ellipsoid,
     });
 
-    it('raises error event when image cannot be loaded', function() {
-        var provider = new SingleTileImageryProvider({
-            url : 'made/up/url'
-        });
-
-        var layer = new ImageryLayer(provider);
-
-        var tries = 0;
-        provider.errorEvent.addEventListener(function(error) {
-            expect(error.timesRetried).toEqual(tries);
-            ++tries;
-            if (tries < 3) {
-                error.retry = true;
-            }
-        });
-
-        loadImage.createImage = function(url, crossOrigin, deferred) {
-            // Succeed after 2 tries
-            if (tries === 2) {
-                // valid URL
-                return loadImage.defaultCreateImage('Data/Images/Red16x16.png', crossOrigin, deferred);
-            }
-
-            // invalid URL
-            return loadImage.defaultCreateImage(url, crossOrigin, deferred);
-        };
-
-        waitsFor(function() {
-            return provider.ready;
-        }, 'imagery provider to become ready');
-
-        var imagery;
-        runs(function() {
-            imagery = new Imagery(layer, 0, 0, 0);
-            imagery.addReference();
-            layer._requestImagery(imagery);
-        });
-
-        waitsFor(function() {
-            return imagery.state === ImageryState.RECEIVED;
-        }, 'image to load');
-
-        runs(function() {
-            expect(imagery.image).toBeInstanceOf(Image);
-            expect(tries).toEqual(2);
-            imagery.releaseReference();
-        });
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      expect(provider.tilingScheme.ellipsoid).toEqual(ellipsoid);
     });
+  });
+
+  it("requests the single image immediately upon construction", function () {
+    const imageUrl = "Data/Images/Red16x16.png";
+
+    spyOn(Resource._Implementations, "createImage").and.callFake(function (
+      request,
+      crossOrigin,
+      deferred
+    ) {
+      const url = request.url;
+      expect(url).toEqual(imageUrl);
+      Resource._DefaultImplementations.createImage(
+        request,
+        crossOrigin,
+        deferred
+      );
+    });
+
+    const provider = new SingleTileImageryProvider({
+      url: imageUrl,
+    });
+
+    expect(Resource._Implementations.createImage).toHaveBeenCalled();
+
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      return Promise.resolve(provider.requestImage(0, 0, 0)).then(function (
+        image
+      ) {
+        expect(image).toBeImageOrImageBitmap();
+      });
+    });
+  });
+
+  it("turns the supplied credit into a logo", function () {
+    const provider = new SingleTileImageryProvider({
+      url: "Data/Images/Red16x16.png",
+    });
+
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      expect(provider.credit).toBeUndefined();
+
+      const providerWithCredit = new SingleTileImageryProvider({
+        url: "Data/Images/Red16x16.png",
+        credit: "Thanks to our awesome made up source of this imagery!",
+      });
+
+      return pollToPromise(function () {
+        return providerWithCredit.ready;
+      }).then(function () {
+        expect(providerWithCredit.credit).toBeDefined();
+      });
+    });
+  });
+
+  it("raises error event when image cannot be loaded", function () {
+    const provider = new SingleTileImageryProvider({
+      url: "made/up/url",
+    });
+
+    const layer = new ImageryLayer(provider);
+
+    let tries = 0;
+    provider.errorEvent.addEventListener(function (error) {
+      expect(error.timesRetried).toEqual(tries);
+      ++tries;
+      if (tries < 3) {
+        error.retry = true;
+      }
+    });
+
+    Resource._Implementations.createImage = function (
+      request,
+      crossOrigin,
+      deferred
+    ) {
+      if (tries === 2) {
+        // Succeed after 2 tries
+        Resource._DefaultImplementations.createImage(
+          new Request({ url: "Data/Images/Red16x16.png" }),
+          crossOrigin,
+          deferred
+        );
+      } else {
+        // fail
+        setTimeout(function () {
+          deferred.reject();
+        }, 1);
+      }
+    };
+
+    return pollToPromise(function () {
+      return provider.ready;
+    }).then(function () {
+      const imagery = new Imagery(layer, 0, 0, 0);
+      imagery.addReference();
+      layer._requestImagery(imagery);
+
+      return pollToPromise(function () {
+        return imagery.state === ImageryState.RECEIVED;
+      }).then(function () {
+        expect(imagery.image).toBeImageOrImageBitmap();
+        expect(tries).toEqual(2);
+        imagery.releaseReference();
+      });
+    });
+  });
 });

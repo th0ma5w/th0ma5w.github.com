@@ -1,48 +1,78 @@
-/*global defineSuite*/
-defineSuite([
-         'Widgets/InfoBox/InfoBox',
-         'Core/Ellipsoid',
-         'Scene/SceneTransitioner',
-         'Specs/createScene',
-         'Specs/destroyScene'
-     ], function(
-         InfoBox,
-         Ellipsoid,
-         SceneTransitioner,
-         createScene,
-         destroyScene) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { defined } from "../../../Source/Cesium.js";
+import pollToPromise from "../../pollToPromise.js";
+import { InfoBox } from "../../../Source/Cesium.js";
 
-    it('constructor sets expected values', function() {
-        var testElement = document.createElement('span');
-        var infoBox = new InfoBox(testElement);
-        expect(infoBox.container).toBe(testElement);
-        expect(infoBox.viewModel).toBeDefined();
-        expect(infoBox.isDestroyed()).toEqual(false);
-        infoBox.destroy();
-        expect(infoBox.isDestroyed()).toEqual(true);
-    });
+describe("Widgets/InfoBox/InfoBox", function () {
+  let testContainer;
+  let infoBox;
+  beforeEach(function () {
+    testContainer = document.createElement("span");
+    testContainer.id = "testContainer";
+    document.body.appendChild(testContainer);
+  });
 
-    it('constructor works with string id container', function() {
-        var testElement = document.createElement('span');
-        testElement.id = 'testElement';
-        document.body.appendChild(testElement);
-        var infoBox = new InfoBox('testElement');
-        expect(infoBox.container).toBe(testElement);
-        document.body.removeChild(testElement);
-        infoBox.destroy();
-    });
+  afterEach(function () {
+    if (defined(infoBox) && !infoBox.isDestroyed()) {
+      infoBox = infoBox.destroy();
+    }
+    document.body.removeChild(testContainer);
+  });
 
-    it('throws if container is undefined', function() {
-        expect(function() {
-            return new InfoBox(undefined);
-        }).toThrowDeveloperError();
-    });
+  it("constructor sets expected values", function () {
+    infoBox = new InfoBox(testContainer);
+    expect(infoBox.container).toBe(testContainer);
+    expect(infoBox.viewModel).toBeDefined();
+    expect(infoBox.isDestroyed()).toEqual(false);
+    infoBox.destroy();
+    expect(infoBox.isDestroyed()).toEqual(true);
+  });
 
-    it('throws if container string is undefined', function() {
-        expect(function() {
-            return new InfoBox('testElement');
-        }).toThrowDeveloperError();
-    });
+  it("can set description body", function () {
+    const infoBox = new InfoBox(testContainer);
+    let node;
+
+    const infoElement = testContainer.firstChild;
+
+    infoBox.viewModel.description = "Please do not crash";
+    return pollToPromise(function () {
+      node = infoBox.frame.contentDocument.body.firstChild;
+      return node !== null;
+    })
+      .then(function () {
+        expect(infoElement.style["background-color"]).toEqual("");
+        return pollToPromise(function () {
+          return node.innerHTML === infoBox.viewModel.description;
+        });
+      })
+      .then(function () {
+        infoBox.viewModel.description =
+          '<div style="background-color: rgb(255, 255, 255);">Please do not crash</div>';
+        expect(infoElement.style["background-color"]).toEqual(
+          "rgb(255, 255, 255)"
+        );
+        return pollToPromise(function () {
+          return node.innerHTML === infoBox.viewModel.description;
+        });
+      })
+      .then(function () {
+        expect(infoElement["background-color"]).toBeUndefined();
+      });
+  });
+
+  it("constructor works with string id container", function () {
+    infoBox = new InfoBox("testContainer");
+    expect(infoBox.container.id).toBe(testContainer.id);
+  });
+
+  it("throws if container is undefined", function () {
+    expect(function () {
+      return new InfoBox(undefined);
+    }).toThrowDeveloperError();
+  });
+
+  it("throws if container string is undefined", function () {
+    expect(function () {
+      return new InfoBox("foo");
+    }).toThrowDeveloperError();
+  });
 });

@@ -1,38 +1,30 @@
-/*global define*/
-define([
-        './defined'
-    ], function(
-        defined) {
-    "use strict";
+import defined from "./defined.js";
 
-    /**
-     * Formats an error object into a String.  If available, uses name, message, and stack
-     * properties, otherwise, falls back on toString().
-     *
-     * @exports formatError
-     *
-     * @param {Object} object The item to find in the array.
-     *
-     * @returns {String} A string containing the formatted error.
-     */
-    var formatError = function(object) {
-        var result;
+/**
+ * Formats an error object into a String.  If available, uses name, message, and stack
+ * properties, otherwise, falls back on toString().
+ *
+ * @function
+ *
+ * @param {*} object The item to find in the array.
+ * @returns {String} A string containing the formatted error.
+ */
+function formatError(object) {
+  let result;
 
-        var name = object.name;
-        var message = object.message;
-        if (defined(name) && defined(message)) {
-            result = name + ': ' + message;
-        } else {
-            result = object.toString();
-        }
+  const name = object.name;
+  const message = object.message;
+  if (defined(name) && defined(message)) {
+    result = `${name}: ${message}`;
+  } else {
+    result = object.toString();
+  }
 
-        var stack = object.stack;
-        if (defined(stack)) {
-            result += '\n' + stack;
-        }
+  const stack = object.stack;
+  if (defined(stack)) {
+    result += `\n${stack}`;
+  }
 
-        return result;
-    };
-
-    return formatError;
-});
+  return result;
+}
+export default formatError;

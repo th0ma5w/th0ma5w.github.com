@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * A built-in GLSL floating-point constant for one solar radius.\n\
  *\n\
  * @alias czm_solarRadius\n\
@@ -14,5 +11,5 @@
  * // GLSL declaration\n\
  * const float czm_solarRadius = ...;\n\
  */\n\
-const float czm_solarRadius = 695500000.0;";
-});
+const float czm_solarRadius = 695500000.0;\n\
+";

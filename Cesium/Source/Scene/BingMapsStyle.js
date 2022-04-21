@@ -1,60 +1,93 @@
-/*global define*/
-define(['../Core/Enumeration'], function(Enumeration) {
-    "use strict";
+/**
+ * The types of imagery provided by Bing Maps.
+ *
+ * @enum {Number}
+ *
+ * @see BingMapsImageryProvider
+ */
+const BingMapsStyle = {
+  /**
+   * Aerial imagery.
+   *
+   * @type {String}
+   * @constant
+   */
+  AERIAL: "Aerial",
 
-    /**
-     * An enumeration of the types of imagery provided by Bing Maps.
-     *
-     * @exports BingMapsStyle
-     *
-     * @see BingMapsImageryProvider
-     */
-    var BingMapsStyle = {
-        /**
-         * Aerial imagery.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 0
-         */
-        AERIAL : new Enumeration(0, 'AERIAL', { imagerySetName : 'Aerial' }),
+  /**
+   * Aerial imagery with a road overlay.
+   *
+   * @type {String}
+   * @constant
+   * @deprecated See https://github.com/CesiumGS/cesium/issues/7128.
+   * Use `BingMapsStyle.AERIAL_WITH_LABELS_ON_DEMAND` instead
+   */
+  AERIAL_WITH_LABELS: "AerialWithLabels",
 
-        /**
-         * Aerial imagery with a road overlay.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 1
-         */
-        AERIAL_WITH_LABELS : new Enumeration(1, 'AERIAL_WITH_LABELS', { imagerySetName : 'AerialWithLabels' }),
+  /**
+   * Aerial imagery with a road overlay.
+   *
+   * @type {String}
+   * @constant
+   */
+  AERIAL_WITH_LABELS_ON_DEMAND: "AerialWithLabelsOnDemand",
 
-        /**
-         * Roads without additional imagery.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 2
-         */
-        ROAD : new Enumeration(2, 'ROAD', { imagerySetName : 'Road' }),
+  /**
+   * Roads without additional imagery.
+   *
+   * @type {String}
+   * @constant
+   * @deprecated See https://github.com/CesiumGS/cesium/issues/7128.
+   * Use `BingMapsStyle.ROAD_ON_DEMAND` instead
+   */
+  ROAD: "Road",
 
-        /**
-         * Ordnance Survey imagery
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 3
-         */
-        ORDNANCE_SURVEY : new Enumeration(3, 'ORDNANCE_SURVEY', { imagerySetName : 'OrdnanceSurvey' }),
+  /**
+   * Roads without additional imagery.
+   *
+   * @type {String}
+   * @constant
+   */
+  ROAD_ON_DEMAND: "RoadOnDemand",
 
-        /**
-         * Collins Bart imagery.
-         *
-         * @type {Enumeration}
-         * @constant
-         * @default 4
-         */
-        COLLINS_BART : new Enumeration(4, 'COLLINS_BART', { imagerySetName : 'CollinsBart' })
-    };
+  /**
+   * A dark version of the road maps.
+   *
+   * @type {String}
+   * @constant
+   */
+  CANVAS_DARK: "CanvasDark",
 
-    return BingMapsStyle;
-});
+  /**
+   * A lighter version of the road maps.
+   *
+   * @type {String}
+   * @constant
+   */
+  CANVAS_LIGHT: "CanvasLight",
+
+  /**
+   * A grayscale version of the road maps.
+   *
+   * @type {String}
+   * @constant
+   */
+  CANVAS_GRAY: "CanvasGray",
+
+  /**
+   * Ordnance Survey imagery. This imagery is visible only for the London, UK area.
+   *
+   * @type {String}
+   * @constant
+   */
+  ORDNANCE_SURVEY: "OrdnanceSurvey",
+
+  /**
+   * Collins Bart imagery.
+   *
+   * @type {String}
+   * @constant
+   */
+  COLLINS_BART: "CollinsBart",
+};
+export default Object.freeze(BingMapsStyle);

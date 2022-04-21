@@ -1,78 +1,58 @@
-/*global defineSuite*/
-defineSuite([
-         'Core/requestAnimationFrame',
-         'Core/cancelAnimationFrame'
-     ], function(
-         requestAnimationFrame,
-         cancelAnimationFrame) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import {
+  cancelAnimationFrame,
+  defer,
+  requestAnimationFrame,
+} from "../../Source/Cesium.js";
 
-    it('calls the callback', function() {
-        var callbackRan = false;
+describe("Core/requestAnimationFrame", function () {
+  it("calls the callback", function () {
+    const promise = new Promise(requestAnimationFrame);
+    return promise.then(function (requestId) {
+      expect(requestId).toBeDefined();
+    });
+  });
 
-        runs(function() {
-            var requestID = requestAnimationFrame(function() {
-                callbackRan = true;
-            });
-            expect(requestID).toBeDefined();
-        });
+  it("provides a timestamp that increases each frame", function () {
+    const deferred = defer();
 
-        waitsFor(function() {
-            return callbackRan;
-        });
+    const callbackTimestamps = [];
+
+    function callback(timestamp) {
+      callbackTimestamps.push(timestamp);
+
+      if (callbackTimestamps.length < 3) {
+        requestAnimationFrame(callback);
+      } else {
+        expect(callbackTimestamps[0]).toBeLessThanOrEqual(
+          callbackTimestamps[1]
+        );
+        expect(callbackTimestamps[1]).toBeLessThanOrEqual(
+          callbackTimestamps[2]
+        );
+        deferred.resolve();
+      }
+    }
+
+    requestAnimationFrame(callback);
+
+    return deferred.promise;
+  });
+
+  it("can cancel a callback", function () {
+    const deferred = defer();
+
+    const shouldNotBeCalled = jasmine.createSpy("shouldNotBeCalled");
+
+    const requestID = requestAnimationFrame(shouldNotBeCalled);
+    cancelAnimationFrame(requestID);
+
+    // schedule and wait for another callback
+    requestAnimationFrame(function () {
+      // make sure cancelled callback didn't run
+      expect(shouldNotBeCalled).not.toHaveBeenCalled();
+      deferred.resolve();
     });
 
-    it('provides a timestamp that increases each frame', function() {
-        var callbackTimestamps = [];
-
-        runs(function() {
-            function callback(timestamp) {
-                callbackTimestamps.push(timestamp);
-
-                if (callbackTimestamps.length < 3) {
-                    requestAnimationFrame(callback);
-                }
-            }
-            requestAnimationFrame(callback);
-        });
-
-        waitsFor(function() {
-            return callbackTimestamps.length === 3;
-        });
-
-        runs(function() {
-            expect(callbackTimestamps[0]).toBeLessThanOrEqualTo(callbackTimestamps[1]);
-            expect(callbackTimestamps[1]).toBeLessThanOrEqualTo(callbackTimestamps[2]);
-        });
-    });
-
-    it('can cancel a callback', function() {
-        var cancelledCallbackRan = false;
-
-        runs(function() {
-            var requestID = requestAnimationFrame(function() {
-                cancelledCallbackRan = true;
-            });
-            cancelAnimationFrame(requestID);
-        });
-
-        // schedule and wait for another callback
-
-        var secondCallbackRan = false;
-        runs(function() {
-            requestAnimationFrame(function() {
-                secondCallbackRan = true;
-            });
-        });
-
-        waitsFor(function() {
-            return secondCallbackRan;
-        });
-
-        runs(function() {
-            // make sure cancelled callback didn't run
-            expect(cancelledCallbackRan).toBe(false);
-        });
-    });
+    return deferred.promise;
+  });
 });

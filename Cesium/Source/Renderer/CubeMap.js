@@ -1,385 +1,631 @@
-/*global define*/
-define([
-        '../Core/defined',
-        '../Core/DeveloperError',
-        '../Core/destroyObject',
-        '../Core/defaultValue',
-        '../Core/Math',
-        './MipmapHint',
-        './PixelDatatype',
-        './TextureMagnificationFilter',
-        './TextureMinificationFilter',
-        './TextureWrap',
-        './CubeMapFace'
-    ], function(
-        defined,
-        DeveloperError,
-        destroyObject,
-        defaultValue,
-        CesiumMath,
-        MipmapHint,
-        PixelDatatype,
-        TextureMagnificationFilter,
-        TextureMinificationFilter,
-        TextureWrap,
-        CubeMapFace) {
-    "use strict";
+import Check from "../Core/Check.js";
+import defaultValue from "../Core/defaultValue.js";
+import defined from "../Core/defined.js";
+import destroyObject from "../Core/destroyObject.js";
+import DeveloperError from "../Core/DeveloperError.js";
+import CesiumMath from "../Core/Math.js";
+import PixelFormat from "../Core/PixelFormat.js";
+import ContextLimits from "./ContextLimits.js";
+import CubeMapFace from "./CubeMapFace.js";
+import MipmapHint from "./MipmapHint.js";
+import PixelDatatype from "./PixelDatatype.js";
+import Sampler from "./Sampler.js";
+import TextureMagnificationFilter from "./TextureMagnificationFilter.js";
+import TextureMinificationFilter from "./TextureMinificationFilter.js";
 
-    /**
-     * A cube map with faces +x, -x, +y, -y, +z, and -z.  Cube maps are used for environment techniques like
-     * approximate reflection and refraction as used in the Reflection and Refraction {@link Material}s.
-     *
-     * @alias CubeMap
-     * @internalConstructor
-     *
-     * @see Context#createCubeMap
-     */
-    var CubeMap = function(gl, textureFilterAnisotropic, textureTarget, texture, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY) {
-        this._gl = gl;
-        this._textureFilterAnisotropic = textureFilterAnisotropic;
-        this._textureTarget = textureTarget;
-        this._texture = texture;
-        this._pixelFormat = pixelFormat;
-        this._pixelDatatype = pixelDatatype;
-        this._size = size;
-        this._preMultiplyAlpha = preMultiplyAlpha;
-        this._flipY = flipY;
-        this._sampler = undefined;
+/**
+ * @private
+ */
+function CubeMap(options) {
+  options = defaultValue(options, defaultValue.EMPTY_OBJECT);
 
-        this._positiveX = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_POSITIVE_X, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
-        this._negativeX = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_NEGATIVE_X, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
-        this._positiveY = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_POSITIVE_Y, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
-        this._negativeY = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
-        this._positiveZ = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_POSITIVE_Z, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
-        this._negativeZ = new CubeMapFace(gl, texture, textureTarget, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z, pixelFormat, pixelDatatype, size, preMultiplyAlpha, flipY);
+  //>>includeStart('debug', pragmas.debug);
+  Check.defined("options.context", options.context);
+  //>>includeEnd('debug');
 
-        this.setSampler();
-    };
+  const context = options.context;
+  const source = options.source;
+  let width;
+  let height;
 
-    /**
-     * Returns the +x face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The +x face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPositiveX = function() {
-        return this._positiveX;
-    };
+  if (defined(source)) {
+    const faces = [
+      source.positiveX,
+      source.negativeX,
+      source.positiveY,
+      source.negativeY,
+      source.positiveZ,
+      source.negativeZ,
+    ];
 
-    /**
-     * Returns the -x face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The -x face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getNegativeX = function() {
-        return this._negativeX;
-    };
+    //>>includeStart('debug', pragmas.debug);
+    if (
+      !faces[0] ||
+      !faces[1] ||
+      !faces[2] ||
+      !faces[3] ||
+      !faces[4] ||
+      !faces[5]
+    ) {
+      throw new DeveloperError(
+        "options.source requires positiveX, negativeX, positiveY, negativeY, positiveZ, and negativeZ faces."
+      );
+    }
+    //>>includeEnd('debug');
 
-    /**
-     * Returns the +y face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The +y face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPositiveY = function() {
-        return this._positiveY;
-    };
+    width = faces[0].width;
+    height = faces[0].height;
 
-    /**
-     * Returns the -y face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The -y face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getNegativeY = function() {
-        return this._negativeY;
-    };
+    //>>includeStart('debug', pragmas.debug);
+    for (let i = 1; i < 6; ++i) {
+      if (
+        Number(faces[i].width) !== width ||
+        Number(faces[i].height) !== height
+      ) {
+        throw new DeveloperError(
+          "Each face in options.source must have the same width and height."
+        );
+      }
+    }
+    //>>includeEnd('debug');
+  } else {
+    width = options.width;
+    height = options.height;
+  }
 
-    /**
-     * Returns the +z face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The +z face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPositiveZ = function() {
-        return this._positiveZ;
-    };
+  const size = width;
+  const pixelDatatype = defaultValue(
+    options.pixelDatatype,
+    PixelDatatype.UNSIGNED_BYTE
+  );
+  const pixelFormat = defaultValue(options.pixelFormat, PixelFormat.RGBA);
+  const internalFormat = PixelFormat.toInternalFormat(
+    pixelFormat,
+    pixelDatatype,
+    context
+  );
 
-    /**
-     * Returns the -z face of this cube map for modification, rendering to, etc.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {CubeMapFace} The -z face of this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getNegativeZ = function() {
-        return this._negativeZ;
-    };
+  //>>includeStart('debug', pragmas.debug);
+  if (!defined(width) || !defined(height)) {
+    throw new DeveloperError(
+      "options requires a source field to create an initialized cube map or width and height fields to create a blank cube map."
+    );
+  }
 
-    /**
-     * Generates a complete mipmap chain for each cubemap face.
-     *
-     * @memberof CubeMap
-     *
-     * @param {MipmapHint} [hint=MipmapHint.DONT_CARE] A performance vs. quality hint.
-     *
-     * @exception {DeveloperError} hint is invalid.
-     * @exception {DeveloperError} This CubeMap's width must be a power of two to call generateMipmap().
-     * @exception {DeveloperError} This CubeMap's height must be a power of two to call generateMipmap().
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     *
-     * @example
-     * // Generate mipmaps, and then set the sampler so mipmaps are used for
-     * // minification when the cube map is sampled.
-     * cubeMap.generateMipmap();
-     * cubeMap.setSampler(context.createSampler({
-     *   minificationFilter : Cesium.TextureMinificationFilter.NEAREST_MIPMAP_LINEAR
-     * }));
-     */
-    CubeMap.prototype.generateMipmap = function(hint) {
-        hint = defaultValue(hint, MipmapHint.DONT_CARE);
+  if (width !== height) {
+    throw new DeveloperError("Width must equal height.");
+  }
 
-        //>>includeStart('debug', pragmas.debug);
-        if ((this._size > 1) && !CesiumMath.isPowerOfTwo(this._size)) {
-            throw new DeveloperError('width and height must be a power of two to call generateMipmap().');
-        }
-        if (!MipmapHint.validate(hint)) {
-            throw new DeveloperError('hint is invalid.');
-        }
-        //>>includeEnd('debug');
+  if (size <= 0) {
+    throw new DeveloperError("Width and height must be greater than zero.");
+  }
 
-        var gl = this._gl;
-        var target = this._textureTarget;
-        gl.hint(gl.GENERATE_MIPMAP_HINT, hint);
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(target, this._texture);
-        gl.generateMipmap(target);
-        gl.bindTexture(target, null);
-    };
+  if (size > ContextLimits.maximumCubeMapSize) {
+    throw new DeveloperError(
+      `Width and height must be less than or equal to the maximum cube map size (${ContextLimits.maximumCubeMapSize}).  Check maximumCubeMapSize.`
+    );
+  }
 
-    /**
-     * DOC_TBA
-     *
-     * @memberof CubeMap
-     *
-     * @param [sampler] DOC_TBA
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.setSampler = function(sampler) {
-        if (!defined(sampler)) {
-            var minFilter = TextureMinificationFilter.LINEAR;
-            var magFilter = TextureMagnificationFilter.LINEAR;
-            if (this._pixelDatatype === PixelDatatype.FLOAT) {
-                minFilter = TextureMinificationFilter.NEAREST;
-                magFilter = TextureMagnificationFilter.NEAREST;
-            }
+  if (!PixelFormat.validate(pixelFormat)) {
+    throw new DeveloperError("Invalid options.pixelFormat.");
+  }
 
-            sampler = {
-                wrapS : TextureWrap.CLAMP_TO_EDGE,
-                wrapT : TextureWrap.CLAMP_TO_EDGE,
-                minificationFilter : minFilter,
-                magnificationFilter : magFilter,
-                maximumAnisotropy : 1.0
-            };
-        }
+  if (PixelFormat.isDepthFormat(pixelFormat)) {
+    throw new DeveloperError(
+      "options.pixelFormat cannot be DEPTH_COMPONENT or DEPTH_STENCIL."
+    );
+  }
 
-        if (this._pixelDatatype === PixelDatatype.FLOAT) {
-            if (sampler.minificationFilter !== TextureMinificationFilter.NEAREST &&
-                    sampler.minificationFilter !== TextureMinificationFilter.NEAREST_MIPMAP_NEAREST) {
-                throw new DeveloperError('Only NEAREST and NEAREST_MIPMAP_NEAREST minification filters are supported for floating point textures.');
-            }
+  if (!PixelDatatype.validate(pixelDatatype)) {
+    throw new DeveloperError("Invalid options.pixelDatatype.");
+  }
 
-            if (sampler.magnificationFilter !== TextureMagnificationFilter.NEAREST) {
-                throw new DeveloperError('Only the NEAREST magnification filter is supported for floating point textures.');
-            }
-        }
+  if (pixelDatatype === PixelDatatype.FLOAT && !context.floatingPointTexture) {
+    throw new DeveloperError(
+      "When options.pixelDatatype is FLOAT, this WebGL implementation must support the OES_texture_float extension."
+    );
+  }
 
-        var gl = this._gl;
-        var target = this._textureTarget;
+  if (
+    pixelDatatype === PixelDatatype.HALF_FLOAT &&
+    !context.halfFloatingPointTexture
+  ) {
+    throw new DeveloperError(
+      "When options.pixelDatatype is HALF_FLOAT, this WebGL implementation must support the OES_texture_half_float extension."
+    );
+  }
+  //>>includeEnd('debug');
 
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(target, this._texture);
-        gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, sampler.minificationFilter);
-        gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, sampler.magnificationFilter);
-        gl.texParameteri(target, gl.TEXTURE_WRAP_S, sampler.wrapS);
-        gl.texParameteri(target, gl.TEXTURE_WRAP_T, sampler.wrapT);
-        if (defined(this._textureFilterAnisotropic)) {
-            gl.texParameteri(target, this._textureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT, sampler.maximumAnisotropy);
-        }
-        gl.bindTexture(target, null);
+  const sizeInBytes =
+    PixelFormat.textureSizeInBytes(pixelFormat, pixelDatatype, size, size) * 6;
 
-        this._sampler = {
-            wrapS : sampler.wrapS,
-            wrapT : sampler.wrapT,
-            minificationFilter : sampler.minificationFilter,
-            magnificationFilter : sampler.magnificationFilter,
-            maximumAnisotropy : sampler.maximumAnisotropy
-        };
-    };
+  // Use premultiplied alpha for opaque textures should perform better on Chrome:
+  // http://media.tojicode.com/webglCamp4/#20
+  const preMultiplyAlpha =
+    options.preMultiplyAlpha ||
+    pixelFormat === PixelFormat.RGB ||
+    pixelFormat === PixelFormat.LUMINANCE;
+  const flipY = defaultValue(options.flipY, true);
+  const skipColorSpaceConversion = defaultValue(
+    options.skipColorSpaceConversion,
+    false
+  );
 
-    /**
-     * DOC_TBA
-     *
-     * @memberof CubeMap
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getSampler = function() {
-        return this._sampler;
-    };
+  const gl = context._gl;
+  const textureTarget = gl.TEXTURE_CUBE_MAP;
+  const texture = gl.createTexture();
 
-    /**
-     * Returns the pixel format of this cube map.  All faces in the same cube map have the same pixel format.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {PixelFormat} The pixel format of this cubemap.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPixelFormat = function() {
-        return this._pixelFormat;
-    };
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(textureTarget, texture);
 
-    /**
-     * Returns the pixel datatype of this cube map.  All faces in the same cube map have the same pixel datatype.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {PixelDatatype} The pixel datatype of this cubemap.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPixelDatatype = function() {
-        return this._pixelDatatype;
-    };
+  function createFace(
+    target,
+    sourceFace,
+    preMultiplyAlpha,
+    flipY,
+    skipColorSpaceConversion
+  ) {
+    let arrayBufferView = sourceFace.arrayBufferView;
+    if (!defined(arrayBufferView)) {
+      arrayBufferView = sourceFace.bufferView;
+    }
 
-    /**
-     * Returns the width, in texels, of faces in this cube map.  All faces in the same cube map have the same width and height, and the width equals the height.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {Number} The width, in texels, of faces in this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getWidth = function() {
-        return this._size;
-    };
+    let unpackAlignment = 4;
+    if (defined(arrayBufferView)) {
+      unpackAlignment = PixelFormat.alignmentInBytes(
+        pixelFormat,
+        pixelDatatype,
+        width
+      );
+    }
 
-    /**
-     * Returns the height, in texels, of faces in this cube map.  All faces in the same cube map have the same width and height, and the width equals the height.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {Number} The height, in texels, of faces in this cube map.
-     *
-     * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getHeight = function() {
-        return this._size;
-    };
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, unpackAlignment);
 
-    /**
-     * Returns true if the cubemap was created with premultiplied alpha (UNPACK_PREMULTIPLY_ALPHA_WEBGL).
-     *
-     * @memberof CubeMap
-     *
-     * @returns {Boolean} true if the cubemap was created with premultiplied alpha; otherwise, false.
-     *
-     * @exception {DeveloperError} This cube map was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getPreMultiplyAlpha = function() {
-        return this._preMultiplyAlpha;
-    };
+    if (skipColorSpaceConversion) {
+      gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+    } else {
+      gl.pixelStorei(
+        gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,
+        gl.BROWSER_DEFAULT_WEBGL
+      );
+    }
 
-    /**
-     * Returns true if the source pixels are flipped vertically when cube-map faces are created or updated, i.e.,
-     * <code>UNPACK_FLIP_Y_WEBGL</code> is used.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {Boolean} True if the source pixels are flipped vertically; otherwise, false.
-     *
-     * @exception {DeveloperError} This cube map was destroyed, i.e., destroy() was called.
-     */
-    CubeMap.prototype.getFlipY = function() {
-        return this._flipY;
-    };
+    if (defined(arrayBufferView)) {
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, false);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
 
-    CubeMap.prototype._getTexture = function() {
-        return this._texture;
-    };
+      if (flipY) {
+        arrayBufferView = PixelFormat.flipY(
+          arrayBufferView,
+          pixelFormat,
+          pixelDatatype,
+          size,
+          size
+        );
+      }
+      gl.texImage2D(
+        target,
+        0,
+        internalFormat,
+        size,
+        size,
+        0,
+        pixelFormat,
+        PixelDatatype.toWebGLConstant(pixelDatatype, context),
+        arrayBufferView
+      );
+    } else {
+      // Only valid for DOM-Element uploads
+      gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, preMultiplyAlpha);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, flipY);
 
-    CubeMap.prototype._getTarget = function() {
-        return this._textureTarget;
-    };
+      // Source: ImageData, HTMLImageElement, HTMLCanvasElement, or HTMLVideoElement
+      gl.texImage2D(
+        target,
+        0,
+        internalFormat,
+        pixelFormat,
+        PixelDatatype.toWebGLConstant(pixelDatatype, context),
+        sourceFace
+      );
+    }
+  }
 
-    /**
-     * Returns true if this object was destroyed; otherwise, false.
-     * <br /><br />
-     * If this object was destroyed, it should not be used; calling any function other than
-     * <code>isDestroyed</code> will result in a {@link DeveloperError} exception.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {Boolean} True if this object was destroyed; otherwise, false.
-     *
-     * @see CubeMap#destroy
-     */
-    CubeMap.prototype.isDestroyed = function() {
-        return false;
-    };
+  if (defined(source)) {
+    createFace(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+      source.positiveX,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+    createFace(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+      source.negativeX,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+    createFace(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+      source.positiveY,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+    createFace(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+      source.negativeY,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+    createFace(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+      source.positiveZ,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+    createFace(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+      source.negativeZ,
+      preMultiplyAlpha,
+      flipY,
+      skipColorSpaceConversion
+    );
+  } else {
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+    gl.texImage2D(
+      gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+      0,
+      internalFormat,
+      size,
+      size,
+      0,
+      pixelFormat,
+      PixelDatatype.toWebGLConstant(pixelDatatype, context),
+      null
+    );
+  }
+  gl.bindTexture(textureTarget, null);
 
-    /**
-     * Destroys the WebGL resources held by this object.  Destroying an object allows for deterministic
-     * release of WebGL resources, instead of relying on the garbage collector to destroy this object.
-     * <br /><br />
-     * Once an object is destroyed, it should not be used; calling any function other than
-     * <code>isDestroyed</code> will result in a {@link DeveloperError} exception.  Therefore,
-     * assign the return value (<code>undefined</code>) to the object as done in the example.
-     *
-     * @memberof CubeMap
-     *
-     * @returns {undefined}
-     *
-     * @exception {DeveloperError} This cube map was destroyed, i.e., destroy() was called.
-     *
-     * @see CubeMap#isDestroyed
-     * @see <a href='http://www.khronos.org/opengles/sdk/2.0/docs/man/glDeleteTextures.xml'>glDeleteTextures</a>
-     *
-     * @example
-     * cubeMap = cubeMap && cubeMap.destroy();
-     */
-    CubeMap.prototype.destroy = function() {
-        this._gl.deleteTexture(this._texture);
-        this._positiveX = destroyObject(this._positiveX);
-        this._negativeX = destroyObject(this._negativeX);
-        this._positiveY = destroyObject(this._positiveY);
-        this._negativeY = destroyObject(this._negativeY);
-        this._positiveZ = destroyObject(this._positiveZ);
-        this._negativeZ = destroyObject(this._negativeZ);
-        return destroyObject(this);
-    };
+  this._context = context;
+  this._textureFilterAnisotropic = context._textureFilterAnisotropic;
+  this._textureTarget = textureTarget;
+  this._texture = texture;
+  this._pixelFormat = pixelFormat;
+  this._pixelDatatype = pixelDatatype;
+  this._size = size;
+  this._hasMipmap = false;
+  this._sizeInBytes = sizeInBytes;
+  this._preMultiplyAlpha = preMultiplyAlpha;
+  this._flipY = flipY;
+  this._sampler = undefined;
 
-    return CubeMap;
+  const initialized = defined(source);
+  this._positiveX = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_POSITIVE_X,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+  this._negativeX = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_X,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+  this._positiveY = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_POSITIVE_Y,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+  this._negativeY = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_Y,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+  this._positiveZ = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_POSITIVE_Z,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+  this._negativeZ = new CubeMapFace(
+    context,
+    texture,
+    textureTarget,
+    gl.TEXTURE_CUBE_MAP_NEGATIVE_Z,
+    internalFormat,
+    pixelFormat,
+    pixelDatatype,
+    size,
+    preMultiplyAlpha,
+    flipY,
+    initialized
+  );
+
+  this.sampler = defined(options.sampler) ? options.sampler : new Sampler();
+}
+
+Object.defineProperties(CubeMap.prototype, {
+  positiveX: {
+    get: function () {
+      return this._positiveX;
+    },
+  },
+  negativeX: {
+    get: function () {
+      return this._negativeX;
+    },
+  },
+  positiveY: {
+    get: function () {
+      return this._positiveY;
+    },
+  },
+  negativeY: {
+    get: function () {
+      return this._negativeY;
+    },
+  },
+  positiveZ: {
+    get: function () {
+      return this._positiveZ;
+    },
+  },
+  negativeZ: {
+    get: function () {
+      return this._negativeZ;
+    },
+  },
+  sampler: {
+    get: function () {
+      return this._sampler;
+    },
+    set: function (sampler) {
+      let minificationFilter = sampler.minificationFilter;
+      let magnificationFilter = sampler.magnificationFilter;
+
+      const mipmap =
+        minificationFilter ===
+          TextureMinificationFilter.NEAREST_MIPMAP_NEAREST ||
+        minificationFilter ===
+          TextureMinificationFilter.NEAREST_MIPMAP_LINEAR ||
+        minificationFilter ===
+          TextureMinificationFilter.LINEAR_MIPMAP_NEAREST ||
+        minificationFilter === TextureMinificationFilter.LINEAR_MIPMAP_LINEAR;
+
+      const context = this._context;
+      const pixelDatatype = this._pixelDatatype;
+
+      // float textures only support nearest filtering unless the linear extensions are supported, so override the sampler's settings
+      if (
+        (pixelDatatype === PixelDatatype.FLOAT &&
+          !context.textureFloatLinear) ||
+        (pixelDatatype === PixelDatatype.HALF_FLOAT &&
+          !context.textureHalfFloatLinear)
+      ) {
+        minificationFilter = mipmap
+          ? TextureMinificationFilter.NEAREST_MIPMAP_NEAREST
+          : TextureMinificationFilter.NEAREST;
+        magnificationFilter = TextureMagnificationFilter.NEAREST;
+      }
+
+      const gl = context._gl;
+      const target = this._textureTarget;
+
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(target, this._texture);
+      gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, minificationFilter);
+      gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, magnificationFilter);
+      gl.texParameteri(target, gl.TEXTURE_WRAP_S, sampler.wrapS);
+      gl.texParameteri(target, gl.TEXTURE_WRAP_T, sampler.wrapT);
+      if (defined(this._textureFilterAnisotropic)) {
+        gl.texParameteri(
+          target,
+          this._textureFilterAnisotropic.TEXTURE_MAX_ANISOTROPY_EXT,
+          sampler.maximumAnisotropy
+        );
+      }
+      gl.bindTexture(target, null);
+
+      this._sampler = sampler;
+    },
+  },
+  pixelFormat: {
+    get: function () {
+      return this._pixelFormat;
+    },
+  },
+  pixelDatatype: {
+    get: function () {
+      return this._pixelDatatype;
+    },
+  },
+  width: {
+    get: function () {
+      return this._size;
+    },
+  },
+  height: {
+    get: function () {
+      return this._size;
+    },
+  },
+  sizeInBytes: {
+    get: function () {
+      if (this._hasMipmap) {
+        return Math.floor((this._sizeInBytes * 4) / 3);
+      }
+      return this._sizeInBytes;
+    },
+  },
+  preMultiplyAlpha: {
+    get: function () {
+      return this._preMultiplyAlpha;
+    },
+  },
+  flipY: {
+    get: function () {
+      return this._flipY;
+    },
+  },
+
+  _target: {
+    get: function () {
+      return this._textureTarget;
+    },
+  },
 });
+
+/**
+ * Generates a complete mipmap chain for each cubemap face.
+ *
+ * @param {MipmapHint} [hint=MipmapHint.DONT_CARE] A performance vs. quality hint.
+ *
+ * @exception {DeveloperError} hint is invalid.
+ * @exception {DeveloperError} This CubeMap's width must be a power of two to call generateMipmap().
+ * @exception {DeveloperError} This CubeMap's height must be a power of two to call generateMipmap().
+ * @exception {DeveloperError} This CubeMap was destroyed, i.e., destroy() was called.
+ *
+ * @example
+ * // Generate mipmaps, and then set the sampler so mipmaps are used for
+ * // minification when the cube map is sampled.
+ * cubeMap.generateMipmap();
+ * cubeMap.sampler = new Sampler({
+ *   minificationFilter : Cesium.TextureMinificationFilter.NEAREST_MIPMAP_LINEAR
+ * });
+ */
+CubeMap.prototype.generateMipmap = function (hint) {
+  hint = defaultValue(hint, MipmapHint.DONT_CARE);
+
+  //>>includeStart('debug', pragmas.debug);
+  if (this._size > 1 && !CesiumMath.isPowerOfTwo(this._size)) {
+    throw new DeveloperError(
+      "width and height must be a power of two to call generateMipmap()."
+    );
+  }
+  if (!MipmapHint.validate(hint)) {
+    throw new DeveloperError("hint is invalid.");
+  }
+  //>>includeEnd('debug');
+
+  this._hasMipmap = true;
+
+  const gl = this._context._gl;
+  const target = this._textureTarget;
+  gl.hint(gl.GENERATE_MIPMAP_HINT, hint);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(target, this._texture);
+  gl.generateMipmap(target);
+  gl.bindTexture(target, null);
+};
+
+CubeMap.prototype.isDestroyed = function () {
+  return false;
+};
+
+CubeMap.prototype.destroy = function () {
+  this._context._gl.deleteTexture(this._texture);
+  this._positiveX = destroyObject(this._positiveX);
+  this._negativeX = destroyObject(this._negativeX);
+  this._positiveY = destroyObject(this._positiveY);
+  this._negativeY = destroyObject(this._negativeY);
+  this._positiveZ = destroyObject(this._positiveZ);
+  this._negativeZ = destroyObject(this._negativeZ);
+  return destroyObject(this);
+};
+export default CubeMap;

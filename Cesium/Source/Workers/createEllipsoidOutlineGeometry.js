@@ -1,24 +1,16 @@
-/*global define*/
-define([
-        '../Core/EllipsoidOutlineGeometry',
-        '../Scene/PrimitivePipeline',
-        './createTaskProcessorWorker'
-    ], function(
-        EllipsoidOutlineGeometry,
-        PrimitivePipeline,
-        createTaskProcessorWorker) {
-    "use strict";
+/* This file is automatically rebuilt by the Cesium build process. */
+define(['./defaultValue-94c3e563', './EllipsoidOutlineGeometry-ddfcbe54', './GeometryOffsetAttribute-3e8c299c', './RuntimeError-c581ca93', './Transforms-c9f24aab', './Matrix2-feb45b00', './ComponentDatatype-b1ea011a', './WebGLConstants-7dccdc96', './_commonjsHelpers-3aae1032-f55dc0c4', './combine-761d9c3f', './GeometryAttribute-a247c9b5', './GeometryAttributes-7df9bef6', './IndexDatatype-c4099fe9'], (function (defaultValue, EllipsoidOutlineGeometry, GeometryOffsetAttribute, RuntimeError, Transforms, Matrix2, ComponentDatatype, WebGLConstants, _commonjsHelpers3aae1032, combine, GeometryAttribute, GeometryAttributes, IndexDatatype) { 'use strict';
 
-    function createEllipsoidOutlineGeometry(parameters, transferableObjects) {
-        var ellipsoidGeometry = parameters.geometry;
-        var geometry = EllipsoidOutlineGeometry.createGeometry(ellipsoidGeometry);
-        PrimitivePipeline.transferGeometry(geometry, transferableObjects);
-
-        return {
-            geometry : geometry,
-            index : parameters.index
-        };
+  function createEllipsoidOutlineGeometry(ellipsoidGeometry, offset) {
+    if (defaultValue.defined(ellipsoidGeometry.buffer)) {
+      ellipsoidGeometry = EllipsoidOutlineGeometry.EllipsoidOutlineGeometry.unpack(
+        ellipsoidGeometry,
+        offset
+      );
     }
+    return EllipsoidOutlineGeometry.EllipsoidOutlineGeometry.createGeometry(ellipsoidGeometry);
+  }
 
-    return createTaskProcessorWorker(createEllipsoidOutlineGeometry);
-});
+  return createEllipsoidOutlineGeometry;
+
+}));

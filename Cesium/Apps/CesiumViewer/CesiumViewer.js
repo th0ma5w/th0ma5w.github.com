@@ -1,160 +1,241 @@
-/*global define*/
-define([
-        'Core/defined',
-        'Core/formatError',
-        'DynamicScene/CzmlDataSource',
-        'DynamicScene/GeoJsonDataSource',
-        'Scene/CesiumTerrainProvider',
-        'Scene/PerformanceDisplay',
-        'Widgets/checkForChromeFrame',
-        'Widgets/Viewer/Viewer',
-        'Widgets/Viewer/viewerDragDropMixin',
-        'Widgets/Viewer/viewerDynamicObjectMixin',
-        'Widgets/Viewer/viewerCesiumInspectorMixin',
-        'domReady!'
-    ], function(
-        defined,
-        formatError,
-        CzmlDataSource,
-        GeoJsonDataSource,
-	CesiumTerrainProvider,
-        PerformanceDisplay,
-        checkForChromeFrame,
-        Viewer,
-        viewerDragDropMixin,
-        viewerDynamicObjectMixin,
-        viewerCesiumInspectorMixin) {
-    "use strict";
-    /*global console*/
+window.CESIUM_BASE_URL = "../../Source/";
 
-    /*
-     * 'debug'  : true/false,   // Full WebGL error reporting at substantial performance cost.
-     * 'lookAt' : CZML id,      // The CZML ID of the object to track at startup.
-     * 'source' : 'file.czml',  // The relative URL of the CZML file to load at startup.
-     * 'stats'  : true,         // Enable the FPS performance display.
-     * 'theme'  : 'lighter',    // Use the dark-text-on-light-background theme.
+import {
+  Cartesian3,
+  createWorldTerrain,
+  defined,
+  formatError,
+  Math as CesiumMath,
+  objectToQuery,
+  queryToObject,
+  CzmlDataSource,
+  GeoJsonDataSource,
+  KmlDataSource,
+  GpxDataSource,
+  TileMapServiceImageryProvider,
+  Viewer,
+  viewerCesiumInspectorMixin,
+  viewerDragDropMixin,
+} from "../../Source/Cesium.js";
+
+function main() {
+  /*
+     Options parsed from query string:
+       source=url          The URL of a CZML/GeoJSON/KML data source to load at startup.
+                           Automatic data type detection uses file extension.
+       sourceType=czml/geojson/kml
+                           Override data type detection for source.
+       flyTo=false         Don't automatically fly to the loaded source.
+       tmsImageryUrl=url   Automatically use a TMS imagery provider.
+       lookAt=id           The ID of the entity to track at startup.
+       stats=true          Enable the FPS performance display.
+       inspector=true      Enable the inspector widget.
+       debug=true          Full WebGL error reporting at substantial performance cost.
+       theme=lighter       Use the dark-text-on-light-background theme.
+       scene3DOnly=true    Enable 3D only mode.
+       view=longitude,latitude,[height,heading,pitch,roll]
+                           Automatically set a camera view. Values in degrees and meters.
+                           [height,heading,pitch,roll] default is looking straight down, [300,0,-90,0]
+       saveCamera=false    Don't automatically update the camera view in the URL when it changes.
      */
-    var endUserOptions = {};
-    var queryString = window.location.search.substring(1);
-    if (queryString !== '') {
-        var params = queryString.split('&');
-        for ( var i = 0, len = params.length; i < len; ++i) {
-            var param = params[i];
-            var keyValuePair = param.split('=');
-            if (keyValuePair.length > 1) {
-                endUserOptions[keyValuePair[0]] = decodeURIComponent(keyValuePair[1].replace(/\+/g, ' '));
-            }
-        }
-    }
+  const endUserOptions = queryToObject(window.location.search.substring(1));
 
-    var loadingIndicator = document.getElementById('loadingIndicator');
+  let imageryProvider;
+  if (defined(endUserOptions.tmsImageryUrl)) {
+    imageryProvider = new TileMapServiceImageryProvider({
+      url: endUserOptions.tmsImageryUrl,
+    });
+  }
 
-    checkForChromeFrame('cesiumContainer').then(function(prompting) {
-        if (!prompting) {
-            startup();
-        } else {
-            loadingIndicator.style.display = 'none';
-        }
-    }).otherwise(function(error) {
-        loadingIndicator.style.display = 'none';
-        var message = formatError(error);
-        console.error(message);
-        if (document.getElementsByClassName('cesium-widget-errorPanel').length < 1) {
-            window.alert(message);
-        }
+  const loadingIndicator = document.getElementById("loadingIndicator");
+  let viewer;
+  try {
+    const hasBaseLayerPicker = !defined(imageryProvider);
+    viewer = new Viewer("cesiumContainer", {
+      imageryProvider: imageryProvider,
+      baseLayerPicker: hasBaseLayerPicker,
+      scene3DOnly: endUserOptions.scene3DOnly,
+      requestRenderMode: true,
     });
 
-    function endsWith(str, suffix) {
-        var strLength = str.length;
-        var suffixLength = suffix.length;
-        return (suffixLength < strLength) && (str.indexOf(suffix, strLength - suffixLength) !== -1);
+    if (hasBaseLayerPicker) {
+      const viewModel = viewer.baseLayerPicker.viewModel;
+      viewModel.selectedTerrain = viewModel.terrainProviderViewModels[1];
+    } else {
+      viewer.terrainProvider = createWorldTerrain({
+        requestWaterMask: true,
+        requestVertexNormals: true,
+      });
+    }
+  } catch (exception) {
+    loadingIndicator.style.display = "none";
+    const message = formatError(exception);
+    console.error(message);
+    if (!document.querySelector(".cesium-widget-errorPanel")) {
+      //eslint-disable-next-line no-alert
+      window.alert(message);
+    }
+    return;
+  }
+
+  viewer.extend(viewerDragDropMixin);
+  if (endUserOptions.inspector) {
+    viewer.extend(viewerCesiumInspectorMixin);
+  }
+
+  const showLoadError = function (name, error) {
+    const title = `An error occurred while loading the file: ${name}`;
+    const message =
+      "An error occurred while loading the file, which may indicate that it is invalid.  A detailed error report is below:";
+    viewer.cesiumWidget.showErrorPanel(title, message, error);
+  };
+
+  viewer.dropError.addEventListener(function (viewerArg, name, error) {
+    showLoadError(name, error);
+  });
+
+  const scene = viewer.scene;
+  const context = scene.context;
+  if (endUserOptions.debug) {
+    context.validateShaderProgram = true;
+    context.validateFramebuffer = true;
+    context.logShaderCompilation = true;
+    context.throwOnWebGLError = true;
+  }
+
+  const view = endUserOptions.view;
+  const source = endUserOptions.source;
+  if (defined(source)) {
+    let sourceType = endUserOptions.sourceType;
+    if (!defined(sourceType)) {
+      // autodetect using file extension if not specified
+      if (/\.czml$/i.test(source)) {
+        sourceType = "czml";
+      } else if (
+        /\.geojson$/i.test(source) ||
+        /\.json$/i.test(source) ||
+        /\.topojson$/i.test(source)
+      ) {
+        sourceType = "geojson";
+      } else if (/\.kml$/i.test(source) || /\.kmz$/i.test(source)) {
+        sourceType = "kml";
+      } else if (/\.gpx$/i.test(source) || /\.gpx$/i.test(source)) {
+        sourceType = "gpx";
+      }
     }
 
-    function startup() {
-        var terrainProvider = new CesiumTerrainProvider({
-          url : '//cesiumjs.org/stk-terrain/tilesets/world/tiles',
-	  credit : 'Terrain data courtesy Analytical Graphics, Inc.'
-        });
-
-        var viewer = new Viewer('cesiumContainer',{terrainProvider : terrainProvider});
-        viewer.extend(viewerDragDropMixin);
-        viewer.extend(viewerDynamicObjectMixin);
-        if (endUserOptions.inspector) {
-            viewer.extend(viewerCesiumInspectorMixin);
-        }
-
-        var showLoadError = function(name, error) {
-            var title = 'An error occurred while loading the file: ' + name;
-            error = formatError(error);
-            viewer.cesiumWidget.showErrorPanel(title, error);
-            console.error(title + ': ' + error);
-        };
-
-        viewer.dropError.addEventListener(function(viewerArg, name, error) {
-            showLoadError(name, error);
-        });
-
-        var scene = viewer.scene;
-        var context = scene.context;
-        if (endUserOptions.debug) {
-            context.setValidateShaderProgram(true);
-            context.setValidateFramebuffer(true);
-            context.setLogShaderCompilation(true);
-            context.setThrowOnWebGLError(true);
-        }
-
-        if (defined(endUserOptions.source)) {
-            var source;
-            var sourceUrl = endUserOptions.source.toUpperCase();
-            if (endsWith(sourceUrl, '.GEOJSON') || //
-                endsWith(sourceUrl, '.JSON') || //
-                endsWith(sourceUrl, '.TOPOJSON')) {
-                source = new GeoJsonDataSource();
-            } else if (endsWith(sourceUrl, '.CZML')) {
-                source = new CzmlDataSource();
-            } else {
-                loadingIndicator.style.display = 'none';
-
-                showLoadError(endUserOptions.source, 'Unknown format.');
-            }
-
-            if (defined(source)) {
-                source.loadUrl(endUserOptions.source).then(function() {
-                    viewer.dataSources.add(source);
-
-                    if (defined(endUserOptions.lookAt)) {
-                        var dynamicObject = source.getDynamicObjectCollection().getById(endUserOptions.lookAt);
-                        if (defined(dynamicObject)) {
-                            viewer.trackedObject = dynamicObject;
-                        } else {
-                            var error = 'No object with id "' + endUserOptions.lookAt + '" exists in the provided source.';
-                            showLoadError(endUserOptions.source, error);
-                        }
-                    }
-                }, function(error) {
-                    showLoadError(endUserOptions.source, error);
-                }).always(function() {
-                    loadingIndicator.style.display = 'none';
-                });
-            }
-        } else {
-            loadingIndicator.style.display = 'none';
-        }
-
-        if (endUserOptions.stats) {
-            scene.debugShowFramesPerSecond = true;
-        }
-
-        var theme = endUserOptions.theme;
-        if (defined(theme)) {
-            if (endUserOptions.theme === 'lighter') {
-                document.body.classList.add('cesium-lighter');
-                viewer.animation.applyThemeChanges();
-            } else {
-                var error = 'Unknown theme: ' + theme;
-                viewer.cesiumWidget.showErrorPanel(error);
-                console.error(error);
-            }
-        }
+    let loadPromise;
+    if (sourceType === "czml") {
+      loadPromise = CzmlDataSource.load(source);
+    } else if (sourceType === "geojson") {
+      loadPromise = GeoJsonDataSource.load(source);
+    } else if (sourceType === "kml") {
+      loadPromise = KmlDataSource.load(source, {
+        camera: scene.camera,
+        canvas: scene.canvas,
+        screenOverlayContainer: viewer.container,
+      });
+    } else if (sourceType === "gpx") {
+      loadPromise = GpxDataSource.load(source);
+    } else {
+      showLoadError(source, "Unknown format.");
     }
-});
+
+    if (defined(loadPromise)) {
+      viewer.dataSources
+        .add(loadPromise)
+        .then(function (dataSource) {
+          const lookAt = endUserOptions.lookAt;
+          if (defined(lookAt)) {
+            const entity = dataSource.entities.getById(lookAt);
+            if (defined(entity)) {
+              viewer.trackedEntity = entity;
+            } else {
+              const error = `No entity with id "${lookAt}" exists in the provided data source.`;
+              showLoadError(source, error);
+            }
+          } else if (!defined(view) && endUserOptions.flyTo !== "false") {
+            viewer.flyTo(dataSource);
+          }
+        })
+        .catch(function (error) {
+          showLoadError(source, error);
+        });
+    }
+  }
+
+  if (endUserOptions.stats) {
+    scene.debugShowFramesPerSecond = true;
+  }
+
+  const theme = endUserOptions.theme;
+  if (defined(theme)) {
+    if (endUserOptions.theme === "lighter") {
+      document.body.classList.add("cesium-lighter");
+      viewer.animation.applyThemeChanges();
+    } else {
+      const error = `Unknown theme: ${theme}`;
+      viewer.cesiumWidget.showErrorPanel(error, "");
+    }
+  }
+
+  if (defined(view)) {
+    const splitQuery = view.split(/[ ,]+/);
+    if (splitQuery.length > 1) {
+      const longitude = !isNaN(+splitQuery[0]) ? +splitQuery[0] : 0.0;
+      const latitude = !isNaN(+splitQuery[1]) ? +splitQuery[1] : 0.0;
+      const height =
+        splitQuery.length > 2 && !isNaN(+splitQuery[2])
+          ? +splitQuery[2]
+          : 300.0;
+      const heading =
+        splitQuery.length > 3 && !isNaN(+splitQuery[3])
+          ? CesiumMath.toRadians(+splitQuery[3])
+          : undefined;
+      const pitch =
+        splitQuery.length > 4 && !isNaN(+splitQuery[4])
+          ? CesiumMath.toRadians(+splitQuery[4])
+          : undefined;
+      const roll =
+        splitQuery.length > 5 && !isNaN(+splitQuery[5])
+          ? CesiumMath.toRadians(+splitQuery[5])
+          : undefined;
+
+      viewer.camera.setView({
+        destination: Cartesian3.fromDegrees(longitude, latitude, height),
+        orientation: {
+          heading: heading,
+          pitch: pitch,
+          roll: roll,
+        },
+      });
+    }
+  }
+
+  const camera = viewer.camera;
+  function saveCamera() {
+    const position = camera.positionCartographic;
+    let hpr = "";
+    if (defined(camera.heading)) {
+      hpr = `,${CesiumMath.toDegrees(camera.heading)},${CesiumMath.toDegrees(
+        camera.pitch
+      )},${CesiumMath.toDegrees(camera.roll)}`;
+    }
+    endUserOptions.view = `${CesiumMath.toDegrees(
+      position.longitude
+    )},${CesiumMath.toDegrees(position.latitude)},${position.height}${hpr}`;
+    history.replaceState(undefined, "", `?${objectToQuery(endUserOptions)}`);
+  }
+
+  let timeout;
+  if (endUserOptions.saveCamera !== "false") {
+    camera.changed.addEventListener(function () {
+      window.clearTimeout(timeout);
+      timeout = window.setTimeout(saveCamera, 1000);
+    });
+  }
+
+  loadingIndicator.style.display = "none";
+}
+
+main();

@@ -1,41 +1,41 @@
-/*global define*/
-define(function() {
-    "use strict";
+import WebGLConstants from "../Core/WebGLConstants.js";
 
-    /**
-     * DOC_TBA
-     *
-     * @exports TextureMagnificationFilter
-     */
-    var TextureMagnificationFilter = {
-        /**
-         * 0x2600.  Nearest magnification texture filtering.
-         *
-         * @type {Number}
-         * @constant
-         */
-        NEAREST : 0x2600,
+/**
+ * Enumerates all possible filters used when magnifying WebGL textures.
+ *
+ * @enum {Number}
+ *
+ * @see TextureMinificationFilter
+ */
+const TextureMagnificationFilter = {
+  /**
+   * Samples the texture by returning the closest pixel.
+   *
+   * @type {Number}
+   * @constant
+   */
+  NEAREST: WebGLConstants.NEAREST,
+  /**
+   * Samples the texture through bi-linear interpolation of the four nearest pixels. This produces smoother results than <code>NEAREST</code> filtering.
+   *
+   * @type {Number}
+   * @constant
+   */
+  LINEAR: WebGLConstants.LINEAR,
+};
 
-        /**
-         * 0x2601.  Linear (bilinear for 2D textures) magnification texture filtering.
-         *
-         * @type {Number}
-         * @constant
-         */
-        LINEAR : 0x2601,
+/**
+ * Validates the given <code>textureMinificationFilter</code> with respect to the possible enum values.
+ * @param textureMagnificationFilter
+ * @returns {Boolean} <code>true</code> if <code>textureMagnificationFilter</code> is valid.
+ *
+ * @private
+ */
+TextureMagnificationFilter.validate = function (textureMagnificationFilter) {
+  return (
+    textureMagnificationFilter === TextureMagnificationFilter.NEAREST ||
+    textureMagnificationFilter === TextureMagnificationFilter.LINEAR
+  );
+};
 
-        /**
-         * DOC_TBA
-         *
-         * @param {TextureMagnificationFilter} textureMagnificationFilter
-         *
-         * @returns {Boolean}
-         */
-        validate : function(textureMagnificationFilter) {
-            return ((textureMagnificationFilter === TextureMagnificationFilter.NEAREST) ||
-                    (textureMagnificationFilter === TextureMagnificationFilter.LINEAR));
-        }
-    };
-
-    return TextureMagnificationFilter;
-});
+export default Object.freeze(TextureMagnificationFilter);

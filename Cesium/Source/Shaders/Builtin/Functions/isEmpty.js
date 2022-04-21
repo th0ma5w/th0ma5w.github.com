@@ -1,8 +1,5 @@
-    //This file is automatically rebuilt by the Cesium build process.
-    /*global define*/
-    define(function() {
-    "use strict";
-    return "/**\n\
+//This file is automatically rebuilt by the Cesium build process.
+export default "/**\n\
  * Determines if a time interval is empty.\n\
  *\n\
  * @name czm_isEmpty\n\
@@ -22,4 +19,3 @@ bool czm_isEmpty(czm_raySegment interval)\n\
     return (interval.stop < 0.0);\n\
 }\n\
 ";
-});

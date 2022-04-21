@@ -1,72 +1,104 @@
-/*global defineSuite*/
-defineSuite([
-         'Core/Spline',
-         'Core/HermiteSpline',
-         'Core/Cartesian3'
-     ], function(
-         Spline,
-         HermiteSpline,
-         Cartesian3) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Cartesian3 } from "../../Source/Cesium.js";
+import { HermiteSpline } from "../../Source/Cesium.js";
+import { Spline } from "../../Source/Cesium.js";
 
-    it('contructor throws', function() {
-        expect(function() {
-            return new Spline();
-        }).toThrowDeveloperError();
+describe("Core/Spline", function () {
+  it("contructor throws", function () {
+    expect(function () {
+      return new Spline();
+    }).toThrowDeveloperError();
+  });
+
+  it("wraps time that is out-of-bounds", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
     });
 
-    it('evaluate throws', function() {
-        var Spline2 = function() {};
-        Spline2.prototype.evaluate = Spline.prototype.eavaluate;
-        var spline = new Spline2();
+    expect(spline.wrapTime(-0.5)).toEqual(1.5);
+    expect(spline.wrapTime(2.5)).toEqual(0.5);
+  });
 
-        expect(function() {
-            return spline.evaluate();
-        }).toThrow();
+  it("clamps time that is out-of-bounds", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
     });
 
-    it('findTimeInterval throws without a time', function() {
-        var spline = HermiteSpline.createNaturalCubic({
-            points : [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
-            times : [0.0, 1.0, 2.0]
-        });
+    expect(spline.clampTime(-0.5)).toEqual(0.0);
+    expect(spline.clampTime(2.5)).toEqual(2.0);
+  });
 
-        expect(function() {
-            spline.findTimeInterval();
-        }).toThrowDeveloperError();
+  it("wrapTime throws without a time", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
     });
 
-    it('findTimeInterval throws when time is out of range', function() {
-        var spline = HermiteSpline.createNaturalCubic({
-            points : [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
-            times : [0.0, 1.0, 2.0]
-        });
+    expect(function () {
+      spline.wrapTime();
+    }).toThrowDeveloperError();
+  });
 
-        expect(function() {
-            spline.findTimeInterval(4.0);
-        }).toThrowDeveloperError();
+  it("clampTime throws without a time", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
     });
 
-    it('findTimeInterval', function() {
-        var spline = HermiteSpline.createNaturalCubic({
-            points : [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y, Cartesian3.UNIT_Z],
-            times : [0.0, 1.0, 2.0, 4.0]
-        });
-        var times = spline.times;
+    expect(function () {
+      spline.clampTime();
+    }).toThrowDeveloperError();
+  });
 
-        expect(spline.findTimeInterval(times[0])).toEqual(0);
-
-        // jump forward
-        expect(spline.findTimeInterval(times[1])).toEqual(1);
-
-        // jump backward
-        expect(spline.findTimeInterval(times[0], 1)).toEqual(0);
-
-        // jump far forward
-        expect(spline.findTimeInterval(times[times.length - 2], 0)).toEqual(times.length - 2);
-
-        // jump far back
-        expect(spline.findTimeInterval(times[0], times.length - 1)).toEqual(0);
+  it("findTimeInterval throws without a time", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
     });
+
+    expect(function () {
+      spline.findTimeInterval();
+    }).toThrowDeveloperError();
+  });
+
+  it("findTimeInterval throws when time is out of range", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [Cartesian3.ZERO, Cartesian3.UNIT_X, Cartesian3.UNIT_Y],
+      times: [0.0, 1.0, 2.0],
+    });
+
+    expect(function () {
+      spline.findTimeInterval(4.0);
+    }).toThrowDeveloperError();
+  });
+
+  it("findTimeInterval", function () {
+    const spline = HermiteSpline.createNaturalCubic({
+      points: [
+        Cartesian3.ZERO,
+        Cartesian3.UNIT_X,
+        Cartesian3.UNIT_Y,
+        Cartesian3.UNIT_Z,
+      ],
+      times: [0.0, 1.0, 2.0, 4.0],
+    });
+    const times = spline.times;
+
+    expect(spline.findTimeInterval(times[0])).toEqual(0);
+
+    // jump forward
+    expect(spline.findTimeInterval(times[1])).toEqual(1);
+
+    // jump backward
+    expect(spline.findTimeInterval(times[0], 1)).toEqual(0);
+
+    // jump far forward
+    expect(spline.findTimeInterval(times[times.length - 2], 0)).toEqual(
+      times.length - 2
+    );
+
+    // jump far back
+    expect(spline.findTimeInterval(times[0], times.length - 1)).toEqual(0);
+  });
 });

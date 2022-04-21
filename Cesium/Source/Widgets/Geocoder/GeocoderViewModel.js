@@ -1,296 +1,555 @@
-/*global define*/
-define([
-        '../../Core/BingMapsApi',
-        '../../Core/defaultValue',
-        '../../Core/defined',
-        '../../Core/defineProperties',
-        '../../Core/DeveloperError',
-        '../../Core/Ellipsoid',
-        '../../Core/Extent',
-        '../../Core/jsonp',
-        '../../Core/Matrix4',
-        '../../Scene/CameraColumbusViewMode',
-        '../../Scene/CameraFlightPath',
-        '../../Scene/SceneMode',
-        '../createCommand',
-        '../../ThirdParty/knockout',
-        '../../ThirdParty/when'
-    ], function(
-        BingMapsApi,
-        defaultValue,
-        defined,
-        defineProperties,
-        DeveloperError,
-        Ellipsoid,
-        Extent,
-        jsonp,
-        Matrix4,
-        CameraColumbusViewMode,
-        CameraFlightPath,
-        SceneMode,
-        createCommand,
-        knockout,
-        when) {
-    "use strict";
+import CartographicGeocoderService from "../../Core/CartographicGeocoderService.js";
+import defaultValue from "../../Core/defaultValue.js";
+import defined from "../../Core/defined.js";
+import DeveloperError from "../../Core/DeveloperError.js";
+import Event from "../../Core/Event.js";
+import GeocodeType from "../../Core/GeocodeType.js";
+import IonGeocoderService from "../../Core/IonGeocoderService.js";
+import CesiumMath from "../../Core/Math.js";
+import Matrix4 from "../../Core/Matrix4.js";
+import Rectangle from "../../Core/Rectangle.js";
+import sampleTerrainMostDetailed from "../../Core/sampleTerrainMostDetailed.js";
+import computeFlyToLocationForRectangle from "../../Scene/computeFlyToLocationForRectangle.js";
+import knockout from "../../ThirdParty/knockout.js";
+import createCommand from "../createCommand.js";
+import getElement from "../getElement.js";
 
-    /**
-     * The view model for the {@link Geocoder} widget.
-     * @alias GeocoderViewModel
-     * @constructor
-     *
-     * @param {Scene} description.scene The Scene instance to use.
-     * @param {String} [description.url='http://dev.virtualearth.net'] The base URL of the Bing Maps API.
-     * @param {String} [description.key] The Bing Maps key for your application, which can be
-     *        created at <a href='https://www.bingmapsportal.com/'>https://www.bingmapsportal.com/</a>.
-     *        If this parameter is not provided, {@link BingMapsApi.defaultKey} is used.
-     *        If {@link BingMapsApi.defaultKey} is undefined as well, a message is
-     *        written to the console reminding you that you must create and supply a Bing Maps
-     *        key as soon as possible.  Please do not deploy an application that uses
-     *        this widget without creating a separate key for your application.
-     * @param {Ellipsoid} [description.ellipsoid=Ellipsoid.WGS84] The Scene's primary ellipsoid.
-     * @param {Number} [description.flightDuration=1500] The duration of the camera flight to an entered location, in milliseconds.
-     */
-    var GeocoderViewModel = function(description) {
-        //>>includeStart('debug', pragmas.debug);
-        if (!defined(description) || !defined(description.scene)) {
-            throw new DeveloperError('description.scene is required.');
-        }
-        //>>includeEnd('debug');
+// The height we use if geocoding to a specific point instead of an rectangle.
+const DEFAULT_HEIGHT = 1000;
 
-        this._url = defaultValue(description.url, '//dev.virtualearth.net/');
-        if (this._url.length > 0 && this._url[this._url.length - 1] !== '/') {
-            this._url += '/';
-        }
+/**
+ * The view model for the {@link Geocoder} widget.
+ * @alias GeocoderViewModel
+ * @constructor
+ *
+ * @param {Object} options Object with the following properties:
+ * @param {Scene} options.scene The Scene instance to use.
+ * @param {GeocoderService[]} [options.geocoderServices] Geocoder services to use for geocoding queries.
+ *        If more than one are supplied, suggestions will be gathered for the geocoders that support it,
+ *        and if no suggestion is selected the result from the first geocoder service wil be used.
+ * @param {Number} [options.flightDuration] The duration of the camera flight to an entered location, in seconds.
+ * @param {Geocoder.DestinationFoundFunction} [options.destinationFound=GeocoderViewModel.flyToDestination] A callback function that is called after a successful geocode.  If not supplied, the default behavior is to fly the camera to the result destination.
+ */
+function GeocoderViewModel(options) {
+  //>>includeStart('debug', pragmas.debug);
+  if (!defined(options) || !defined(options.scene)) {
+    throw new DeveloperError("options.scene is required.");
+  }
+  //>>includeEnd('debug');
 
-        this._key = BingMapsApi.getKey(description.key);
-        this._scene = description.scene;
-        this._ellipsoid = defaultValue(description.ellipsoid, Ellipsoid.WGS84);
-        this._flightDuration = defaultValue(description.flightDuration, 1500);
-        this._searchText = '';
-        this._isSearchInProgress = false;
-        this._geocodeInProgress = undefined;
+  if (defined(options.geocoderServices)) {
+    this._geocoderServices = options.geocoderServices;
+  } else {
+    this._geocoderServices = [
+      new CartographicGeocoderService(),
+      new IonGeocoderService({ scene: options.scene }),
+    ];
+  }
 
-        var that = this;
-        this._searchCommand = createCommand(function() {
-            if (that.isSearchInProgress) {
-                cancelGeocode(that);
-            } else {
-                geocode(that);
-            }
-        });
+  this._viewContainer = options.container;
+  this._scene = options.scene;
+  this._flightDuration = options.flightDuration;
+  this._searchText = "";
+  this._isSearchInProgress = false;
+  this._geocodePromise = undefined;
+  this._complete = new Event();
+  this._suggestions = [];
+  this._selectedSuggestion = undefined;
+  this._showSuggestions = true;
 
-        knockout.track(this, ['_searchText', '_isSearchInProgress']);
+  this._handleArrowDown = handleArrowDown;
+  this._handleArrowUp = handleArrowUp;
 
-        /**
-         * Gets a value indicating whether a search is currently in progress.  This property is observable.
-         *
-         * @type {Boolean}
-         */
-        this.isSearchInProgress = undefined;
-        knockout.defineProperty(this, 'isSearchInProgress', {
-            get : function() {
-                return this._isSearchInProgress;
-            }
-        });
+  const that = this;
 
-        /**
-         * Gets or sets the text to search for.
-         *
-         * @type {String}
-         */
-        this.searchText = undefined;
-        knockout.defineProperty(this, 'searchText', {
-            get : function() {
-                if (this.isSearchInProgress) {
-                    return 'Searching...';
-                }
-                return this._searchText;
-            },
-            set : function(value) {
-                //>>includeStart('debug', pragmas.debug);
-                if (typeof value !== 'string') {
-                    throw new DeveloperError('value must be a valid string.');
-                }
-                //>>includeEnd('debug');
+  this._suggestionsVisible = knockout.pureComputed(function () {
+    const suggestions = knockout.getObservable(that, "_suggestions");
+    const suggestionsNotEmpty = suggestions().length > 0;
+    const showSuggestions = knockout.getObservable(that, "_showSuggestions")();
+    return suggestionsNotEmpty && showSuggestions;
+  });
 
-                this._searchText = value;
-            }
-        });
+  this._searchCommand = createCommand(function (geocodeType) {
+    geocodeType = defaultValue(geocodeType, GeocodeType.SEARCH);
+    that._focusTextbox = false;
+    if (defined(that._selectedSuggestion)) {
+      that.activateSuggestion(that._selectedSuggestion);
+      return false;
+    }
+    that.hideSuggestions();
+    if (that.isSearchInProgress) {
+      cancelGeocode(that);
+    } else {
+      geocode(that, that._geocoderServices, geocodeType);
+    }
+  });
 
-        /**
-         * Gets or sets the the duration of the camera flight in milliseconds.
-         * A value of zero causes the camera to instantly switch to the geocoding location.
-         *
-         * @type {Number}
-         * @default 1500
-         */
-        this.flightDuration = undefined;
-        knockout.defineProperty(this, 'flightDuration', {
-            get : function() {
-                return this._flightDuration;
-            },
-            set : function(value) {
-                //>>includeStart('debug', pragmas.debug);
-                if (value < 0) {
-                    throw new DeveloperError('value must be positive.');
-                }
-                //>>includeEnd('debug');
+  this.deselectSuggestion = function () {
+    that._selectedSuggestion = undefined;
+  };
 
-                this._flightDuration = value;
-            }
-        });
-    };
-
-    defineProperties(GeocoderViewModel.prototype, {
-        /**
-         * Gets the Bing maps url.
-         * @memberof GeocoderViewModel.prototype
-         *
-         * @type {String}
-         */
-        url : {
-            get : function() {
-                return this._url;
-            }
-        },
-
-        /**
-         * Gets the Bing maps key.
-         * @memberof GeocoderViewModel.prototype
-         *
-         * @type {String}
-         */
-        key : {
-            get : function() {
-                return this._key;
-            }
-        },
-
-        /**
-         * Gets the scene to control.
-         * @memberof GeocoderViewModel.prototype
-         *
-         * @type {Scene}
-         */
-        scene : {
-            get : function() {
-                return this._scene;
-            }
-        },
-
-        /**
-         * Gets the ellipsoid to be viewed.
-         * @memberof GeocoderViewModel.prototype
-         *
-         * @type {Ellipsoid}
-         */
-        ellipsoid : {
-            get : function() {
-                return this._ellipsoid;
-            }
-        },
-
-        /**
-         * Gets the Command that is executed when the button is clicked.
-         * @memberof GeocoderViewModel.prototype
-         *
-         * @type {Command}
-         */
-        search : {
-            get : function() {
-                return this._searchCommand;
-            }
-        }
-    });
-
-    var transform2D = new Matrix4(0.0, 0.0, 1.0, 0.0,
-            1.0, 0.0, 0.0, 0.0,
-            0.0, 1.0, 0.0, 0.0,
-            0.0, 0.0, 0.0, 1.0);
-
-    function geocode(viewModel) {
-        var query = viewModel.searchText;
-
-        if (/^\s*$/.test(query)) {
-            //whitespace string
-            return;
-        }
-
-        viewModel._isSearchInProgress = true;
-
-        var promise = jsonp(viewModel._url + 'REST/v1/Locations', {
-            parameters : {
-                query : query,
-                key : viewModel._key
-
-            },
-            callbackParameterName : 'jsonp'
-        });
-
-        var geocodeInProgress = viewModel._geocodeInProgress = when(promise, function(result) {
-            if (geocodeInProgress.cancel) {
-                return;
-            }
-            viewModel._isSearchInProgress = false;
-
-            if (result.resourceSets.length === 0) {
-                viewModel.searchText = viewModel._searchText + ' (not found)';
-                return;
-            }
-
-            var resourceSet = result.resourceSets[0];
-            if (resourceSet.resources.length === 0) {
-                viewModel.searchText = viewModel._searchText + ' (not found)';
-                return;
-            }
-
-            var resource = resourceSet.resources[0];
-
-            viewModel._searchText = resource.name;
-            var bbox = resource.bbox;
-            var south = bbox[0];
-            var west = bbox[1];
-            var north = bbox[2];
-            var east = bbox[3];
-            var extent = Extent.fromDegrees(west, south, east, north);
-
-            var camera = viewModel._scene.camera;
-            var position = camera.controller.getExtentCameraCoordinates(extent);
-            if (!defined(position)) {
-                // This can happen during a scene mode transition.
-                return;
-            }
-
-            var description = {
-                destination : position,
-                duration : viewModel._flightDuration,
-                onComplete : function() {
-                    var screenSpaceCameraController = viewModel._scene.screenSpaceCameraController;
-                    screenSpaceCameraController.ellipsoid = viewModel._ellipsoid;
-                    screenSpaceCameraController.columbusViewMode = CameraColumbusViewMode.FREE;
-                },
-                endReferenceFrame : (viewModel._scene.mode !== SceneMode.SCENE3D) ? transform2D : Matrix4.IDENTITY
-            };
-
-            var flight = CameraFlightPath.createAnimation(viewModel._scene, description);
-            viewModel._scene.animations.add(flight);
-        }, function() {
-            if (geocodeInProgress.cancel) {
-                return;
-            }
-
-            viewModel._isSearchInProgress = false;
-            viewModel.searchText = viewModel._searchText + ' (error)';
-        });
+  this.handleKeyDown = function (data, event) {
+    const downKey =
+      event.key === "ArrowDown" || event.key === "Down" || event.keyCode === 40;
+    const upKey =
+      event.key === "ArrowUp" || event.key === "Up" || event.keyCode === 38;
+    if (downKey || upKey) {
+      event.preventDefault();
     }
 
-    function cancelGeocode(viewModel) {
-        viewModel._isSearchInProgress = false;
-        if (defined(viewModel._geocodeInProgress)) {
-            viewModel._geocodeInProgress.cancel = true;
-            viewModel._geocodeInProgress = undefined;
-        }
-    }
+    return true;
+  };
 
-    return GeocoderViewModel;
+  this.handleKeyUp = function (data, event) {
+    const downKey =
+      event.key === "ArrowDown" || event.key === "Down" || event.keyCode === 40;
+    const upKey =
+      event.key === "ArrowUp" || event.key === "Up" || event.keyCode === 38;
+    const enterKey = event.key === "Enter" || event.keyCode === 13;
+    if (upKey) {
+      handleArrowUp(that);
+    } else if (downKey) {
+      handleArrowDown(that);
+    } else if (enterKey) {
+      that._searchCommand();
+    }
+    return true;
+  };
+
+  this.activateSuggestion = function (data) {
+    that.hideSuggestions();
+    that._searchText = data.displayName;
+    const destination = data.destination;
+    clearSuggestions(that);
+    that.destinationFound(that, destination);
+  };
+
+  this.hideSuggestions = function () {
+    that._showSuggestions = false;
+    that._selectedSuggestion = undefined;
+  };
+
+  this.showSuggestions = function () {
+    that._showSuggestions = true;
+  };
+
+  this.handleMouseover = function (data, event) {
+    if (data !== that._selectedSuggestion) {
+      that._selectedSuggestion = data;
+    }
+  };
+
+  /**
+   * Gets or sets a value indicating if this instance should always show its text input field.
+   *
+   * @type {Boolean}
+   * @default false
+   */
+  this.keepExpanded = false;
+
+  /**
+   * True if the geocoder should query as the user types to autocomplete
+   * @type {Boolean}
+   * @default true
+   */
+  this.autoComplete = defaultValue(options.autocomplete, true);
+
+  /**
+   * Gets and sets the command called when a geocode destination is found
+   * @type {Geocoder.DestinationFoundFunction}
+   */
+  this.destinationFound = defaultValue(
+    options.destinationFound,
+    GeocoderViewModel.flyToDestination
+  );
+
+  this._focusTextbox = false;
+
+  knockout.track(this, [
+    "_searchText",
+    "_isSearchInProgress",
+    "keepExpanded",
+    "_suggestions",
+    "_selectedSuggestion",
+    "_showSuggestions",
+    "_focusTextbox",
+  ]);
+
+  const searchTextObservable = knockout.getObservable(this, "_searchText");
+  searchTextObservable.extend({ rateLimit: { timeout: 500 } });
+  this._suggestionSubscription = searchTextObservable.subscribe(function () {
+    GeocoderViewModel._updateSearchSuggestions(that);
+  });
+  /**
+   * Gets a value indicating whether a search is currently in progress.  This property is observable.
+   *
+   * @type {Boolean}
+   */
+  this.isSearchInProgress = undefined;
+  knockout.defineProperty(this, "isSearchInProgress", {
+    get: function () {
+      return this._isSearchInProgress;
+    },
+  });
+
+  /**
+   * Gets or sets the text to search for.  The text can be an address, or longitude, latitude,
+   * and optional height, where longitude and latitude are in degrees and height is in meters.
+   *
+   * @type {String}
+   */
+  this.searchText = undefined;
+  knockout.defineProperty(this, "searchText", {
+    get: function () {
+      if (this.isSearchInProgress) {
+        return "Searching...";
+      }
+
+      return this._searchText;
+    },
+    set: function (value) {
+      //>>includeStart('debug', pragmas.debug);
+      if (typeof value !== "string") {
+        throw new DeveloperError("value must be a valid string.");
+      }
+      //>>includeEnd('debug');
+      this._searchText = value;
+    },
+  });
+
+  /**
+   * Gets or sets the the duration of the camera flight in seconds.
+   * A value of zero causes the camera to instantly switch to the geocoding location.
+   * The duration will be computed based on the distance when undefined.
+   *
+   * @type {Number|undefined}
+   * @default undefined
+   */
+  this.flightDuration = undefined;
+  knockout.defineProperty(this, "flightDuration", {
+    get: function () {
+      return this._flightDuration;
+    },
+    set: function (value) {
+      //>>includeStart('debug', pragmas.debug);
+      if (defined(value) && value < 0) {
+        throw new DeveloperError("value must be positive.");
+      }
+      //>>includeEnd('debug');
+
+      this._flightDuration = value;
+    },
+  });
+}
+
+Object.defineProperties(GeocoderViewModel.prototype, {
+  /**
+   * Gets the event triggered on flight completion.
+   * @memberof GeocoderViewModel.prototype
+   *
+   * @type {Event}
+   */
+  complete: {
+    get: function () {
+      return this._complete;
+    },
+  },
+
+  /**
+   * Gets the scene to control.
+   * @memberof GeocoderViewModel.prototype
+   *
+   * @type {Scene}
+   */
+  scene: {
+    get: function () {
+      return this._scene;
+    },
+  },
+
+  /**
+   * Gets the Command that is executed when the button is clicked.
+   * @memberof GeocoderViewModel.prototype
+   *
+   * @type {Command}
+   */
+  search: {
+    get: function () {
+      return this._searchCommand;
+    },
+  },
+
+  /**
+   * Gets the currently selected geocoder search suggestion
+   * @memberof GeocoderViewModel.prototype
+   *
+   * @type {Object}
+   */
+  selectedSuggestion: {
+    get: function () {
+      return this._selectedSuggestion;
+    },
+  },
+
+  /**
+   * Gets the list of geocoder search suggestions
+   * @memberof GeocoderViewModel.prototype
+   *
+   * @type {Object[]}
+   */
+  suggestions: {
+    get: function () {
+      return this._suggestions;
+    },
+  },
 });
+
+/**
+ * Destroys the widget.  Should be called if permanently
+ * removing the widget from layout.
+ */
+GeocoderViewModel.prototype.destroy = function () {
+  this._suggestionSubscription.dispose();
+};
+
+function handleArrowUp(viewModel) {
+  if (viewModel._suggestions.length === 0) {
+    return;
+  }
+  const currentIndex = viewModel._suggestions.indexOf(
+    viewModel._selectedSuggestion
+  );
+  if (currentIndex === -1 || currentIndex === 0) {
+    viewModel._selectedSuggestion = undefined;
+    return;
+  }
+  const next = currentIndex - 1;
+  viewModel._selectedSuggestion = viewModel._suggestions[next];
+  GeocoderViewModel._adjustSuggestionsScroll(viewModel, next);
+}
+
+function handleArrowDown(viewModel) {
+  if (viewModel._suggestions.length === 0) {
+    return;
+  }
+  const numberOfSuggestions = viewModel._suggestions.length;
+  const currentIndex = viewModel._suggestions.indexOf(
+    viewModel._selectedSuggestion
+  );
+  const next = (currentIndex + 1) % numberOfSuggestions;
+  viewModel._selectedSuggestion = viewModel._suggestions[next];
+
+  GeocoderViewModel._adjustSuggestionsScroll(viewModel, next);
+}
+
+function computeFlyToLocationForCartographic(cartographic, terrainProvider) {
+  const availability = defined(terrainProvider)
+    ? terrainProvider.availability
+    : undefined;
+
+  if (!defined(availability)) {
+    cartographic.height += DEFAULT_HEIGHT;
+    return Promise.resolve(cartographic);
+  }
+
+  return sampleTerrainMostDetailed(terrainProvider, [cartographic]).then(
+    function (positionOnTerrain) {
+      cartographic = positionOnTerrain[0];
+      cartographic.height += DEFAULT_HEIGHT;
+      return cartographic;
+    }
+  );
+}
+
+function flyToDestination(viewModel, destination) {
+  const scene = viewModel._scene;
+  const mapProjection = scene.mapProjection;
+  const ellipsoid = mapProjection.ellipsoid;
+
+  const camera = scene.camera;
+  const terrainProvider = scene.terrainProvider;
+  let finalDestination = destination;
+
+  let promise;
+  if (destination instanceof Rectangle) {
+    // Some geocoders return a Rectangle of zero width/height, treat it like a point instead.
+    if (
+      CesiumMath.equalsEpsilon(
+        destination.south,
+        destination.north,
+        CesiumMath.EPSILON7
+      ) &&
+      CesiumMath.equalsEpsilon(
+        destination.east,
+        destination.west,
+        CesiumMath.EPSILON7
+      )
+    ) {
+      // destination is now a Cartographic
+      destination = Rectangle.center(destination);
+    } else {
+      promise = computeFlyToLocationForRectangle(destination, scene);
+    }
+  } else {
+    // destination is a Cartesian3
+    destination = ellipsoid.cartesianToCartographic(destination);
+  }
+
+  if (!defined(promise)) {
+    promise = computeFlyToLocationForCartographic(destination, terrainProvider);
+  }
+
+  return promise
+    .then(function (result) {
+      finalDestination = ellipsoid.cartographicToCartesian(result);
+    })
+    .finally(function () {
+      // Whether terrain querying succeeded or not, fly to the destination.
+      camera.flyTo({
+        destination: finalDestination,
+        complete: function () {
+          viewModel._complete.raiseEvent();
+        },
+        duration: viewModel._flightDuration,
+        endTransform: Matrix4.IDENTITY,
+      });
+    });
+}
+
+function chainPromise(promise, geocoderService, query, geocodeType) {
+  return promise.then(function (result) {
+    if (
+      defined(result) &&
+      result.state === "fulfilled" &&
+      result.value.length > 0
+    ) {
+      return result;
+    }
+    const nextPromise = geocoderService
+      .geocode(query, geocodeType)
+      .then(function (result) {
+        return { state: "fulfilled", value: result };
+      })
+      .catch(function (err) {
+        return { state: "rejected", reason: err };
+      });
+
+    return nextPromise;
+  });
+}
+
+function geocode(viewModel, geocoderServices, geocodeType) {
+  const query = viewModel._searchText;
+
+  if (hasOnlyWhitespace(query)) {
+    viewModel.showSuggestions();
+    return;
+  }
+
+  viewModel._isSearchInProgress = true;
+
+  let promise = Promise.resolve();
+  for (let i = 0; i < geocoderServices.length; i++) {
+    promise = chainPromise(promise, geocoderServices[i], query, geocodeType);
+  }
+
+  viewModel._geocodePromise = promise;
+  promise.then(function (result) {
+    if (promise.cancel) {
+      return;
+    }
+    viewModel._isSearchInProgress = false;
+
+    const geocoderResults = result.value;
+    if (
+      result.state === "fulfilled" &&
+      defined(geocoderResults) &&
+      geocoderResults.length > 0
+    ) {
+      viewModel._searchText = geocoderResults[0].displayName;
+      viewModel.destinationFound(viewModel, geocoderResults[0].destination);
+      return;
+    }
+    viewModel._searchText = `${query} (not found)`;
+  });
+}
+
+function adjustSuggestionsScroll(viewModel, focusedItemIndex) {
+  const container = getElement(viewModel._viewContainer);
+  const searchResults = container.getElementsByClassName("search-results")[0];
+  const listItems = container.getElementsByTagName("li");
+  const element = listItems[focusedItemIndex];
+
+  if (focusedItemIndex === 0) {
+    searchResults.scrollTop = 0;
+    return;
+  }
+
+  const offsetTop = element.offsetTop;
+  if (offsetTop + element.clientHeight > searchResults.clientHeight) {
+    searchResults.scrollTop = offsetTop + element.clientHeight;
+  } else if (offsetTop < searchResults.scrollTop) {
+    searchResults.scrollTop = offsetTop;
+  }
+}
+
+function cancelGeocode(viewModel) {
+  viewModel._isSearchInProgress = false;
+  if (defined(viewModel._geocodePromise)) {
+    viewModel._geocodePromise.cancel = true;
+    viewModel._geocodePromise = undefined;
+  }
+}
+
+function hasOnlyWhitespace(string) {
+  return /^\s*$/.test(string);
+}
+
+function clearSuggestions(viewModel) {
+  knockout.getObservable(viewModel, "_suggestions").removeAll();
+}
+
+function updateSearchSuggestions(viewModel) {
+  if (!viewModel.autoComplete) {
+    return;
+  }
+
+  const query = viewModel._searchText;
+
+  clearSuggestions(viewModel);
+  if (hasOnlyWhitespace(query)) {
+    return;
+  }
+
+  let promise = Promise.resolve([]);
+  viewModel._geocoderServices.forEach(function (service) {
+    promise = promise.then(function (results) {
+      if (results.length >= 5) {
+        return results;
+      }
+      return service
+        .geocode(query, GeocodeType.AUTOCOMPLETE)
+        .then(function (newResults) {
+          results = results.concat(newResults);
+          return results;
+        });
+    });
+  });
+  return promise.then(function (results) {
+    const suggestions = viewModel._suggestions;
+    for (let i = 0; i < results.length; i++) {
+      suggestions.push(results[i]);
+    }
+  });
+}
+
+/**
+ * A function to fly to the destination found by a successful geocode.
+ * @type {Geocoder.DestinationFoundFunction}
+ */
+GeocoderViewModel.flyToDestination = flyToDestination;
+
+//exposed for testing
+GeocoderViewModel._updateSearchSuggestions = updateSearchSuggestions;
+GeocoderViewModel._adjustSuggestionsScroll = adjustSuggestionsScroll;
+export default GeocoderViewModel;

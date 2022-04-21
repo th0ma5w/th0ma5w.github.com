@@ -1,115 +1,120 @@
-/*global define*/
-define([
-        '../Core/Color',
-        '../Core/defaultValue',
-        '../Core/defined',
-        '../Core/destroyObject',
-        '../Core/DeveloperError',
-        '../Core/getTimestamp',
-        '../Widgets/getElement'
-    ], function(
-        Color,
-        defaultValue,
-        defined,
-        destroyObject,
-        DeveloperError,
-        getTimestamp,
-        getElement) {
-    "use strict";
+import defaultValue from "../Core/defaultValue.js";
+import defined from "../Core/defined.js";
+import destroyObject from "../Core/destroyObject.js";
+import DeveloperError from "../Core/DeveloperError.js";
+import getTimestamp from "../Core/getTimestamp.js";
+import getElement from "../Widgets/getElement.js";
 
-    var defaultFpsColor = Color.fromCssColorString('#e52');
-    var defaultFrameTimeColor = Color.fromCssColorString('#de3');
-    var defaultBackgroundColor = Color.fromCssColorString('rgba(40, 40, 40, 0.7)');
+/**
+ * @private
+ */
+function PerformanceDisplay(options) {
+  options = defaultValue(options, defaultValue.EMPTY_OBJECT);
 
-    /**
-     * @private
-     */
-    var PerformanceDisplay = function(description) {
-        description = defaultValue(description, defaultValue.EMPTY_OBJECT);
+  const container = getElement(options.container);
+  //>>includeStart('debug', pragmas.debug);
+  if (!defined(container)) {
+    throw new DeveloperError("container is required");
+  }
+  //>>includeEnd('debug');
 
-        var container = getElement(description.container);
-        if (!defined(container)) {
-            throw new DeveloperError('container is required');
-        }
+  this._container = container;
 
-        this._container = container;
-        this._fpsColor = defaultValue(description.fpsColor, defaultFpsColor).toCssColorString();
-        this._frameTimeColor = defaultValue(description.frameTimeColor, defaultFrameTimeColor).toCssColorString();
-        this._backgroundColor = defaultValue(description.backgroundColor, defaultBackgroundColor).toCssColorString();
-        this._font = defaultValue(description.font, 'bold 12px Helvetica,Arial,sans-serif');
+  const display = document.createElement("div");
+  display.className = "cesium-performanceDisplay";
+  const fpsElement = document.createElement("div");
+  fpsElement.className = "cesium-performanceDisplay-fps";
+  this._fpsText = document.createTextNode("");
+  fpsElement.appendChild(this._fpsText);
+  const msElement = document.createElement("div");
+  msElement.className = "cesium-performanceDisplay-ms";
+  this._msText = document.createTextNode("");
+  msElement.appendChild(this._msText);
+  display.appendChild(msElement);
+  display.appendChild(fpsElement);
+  this._container.appendChild(display);
 
-        var display = document.createElement('div');
-        var fpsElement = document.createElement('div');
-        this._fpsText = document.createTextNode("");
-        fpsElement.appendChild(this._fpsText);
-        fpsElement.style.color = this._fpsColor;
-        var msElement = document.createElement('div');
-        this._msText = document.createTextNode("");
-        msElement.style.color = this._frameTimeColor;
-        msElement.appendChild(this._msText);
-        display.appendChild(fpsElement);
-        display.appendChild(msElement);
-        display.style['z-index'] = 1;
-        display.style['background-color'] = this._backgroundColor;
-        display.style.font = this._font;
-        display.style.padding = '7px';
-        display.style['border-radius'] = '5px';
-        display.style.border = '1px solid #444';
-        this._container.appendChild(display);
+  this._lastFpsSampleTime = getTimestamp();
+  this._lastMsSampleTime = getTimestamp();
+  this._fpsFrameCount = 0;
+  this._msFrameCount = 0;
 
-        this._lastFpsSampleTime = undefined;
-        this._frameCount = 0;
-        this._time = undefined;
-        this._fps = 0;
-        this._frameTime = 0;
-    };
+  this._throttled = false;
+  const throttledElement = document.createElement("div");
+  throttledElement.className = "cesium-performanceDisplay-throttled";
+  this._throttledText = document.createTextNode("");
+  throttledElement.appendChild(this._throttledText);
+  display.appendChild(throttledElement);
+}
 
-    /**
-     * Update the display.  This function should only be called once per frame, because
-     * each call records a frame in the internal buffer and redraws the display.
-     */
-    PerformanceDisplay.prototype.update = function() {
-        if (!defined(this._time)) {
-            //first update
-            this._lastFpsSampleTime = getTimestamp();
-            this._time = getTimestamp();
-            return;
-        }
+Object.defineProperties(PerformanceDisplay.prototype, {
+  /**
+   * The display should indicate the FPS is being throttled.
+   * @memberof PerformanceDisplay.prototype
+   *
+   * @type {Boolean}
+   */
+  throttled: {
+    get: function () {
+      return this._throttled;
+    },
+    set: function (value) {
+      if (this._throttled === value) {
+        return;
+      }
 
-        var previousTime = this._time;
-        var time = getTimestamp();
-        this._time = time;
+      if (value) {
+        this._throttledText.nodeValue = "(throttled)";
+      } else {
+        this._throttledText.nodeValue = "";
+      }
 
-        var frameTime = time - previousTime;
-
-        this._frameCount++;
-        var fps = this._fps;
-        var fpsElapsedTime = time - this._lastFpsSampleTime;
-        if (fpsElapsedTime > 1000) {
-            fps = this._frameCount * 1000 / fpsElapsedTime | 0;
-
-            this._lastFpsSampleTime = time;
-            this._frameCount = 0;
-        }
-
-        if (fps !== this._fps) {
-            this._fpsText.nodeValue = fps + ' FPS';
-            this._fps = fps;
-        }
-
-        if (frameTime !== this._frameTime) {
-            this._msText.nodeValue = frameTime.toFixed(2) + ' MS';
-            this._frameTime = frameTime;
-        }
-
-    };
-
-    /**
-     * Destroys the WebGL resources held by this object.
-     */
-    PerformanceDisplay.prototype.destroy = function() {
-        return destroyObject(this);
-    };
-
-    return PerformanceDisplay;
+      this._throttled = value;
+    },
+  },
 });
+
+/**
+ * Update the display.  This function should only be called once per frame, because
+ * each call records a frame in the internal buffer and redraws the display.
+ *
+ * @param {Boolean} [renderedThisFrame=true] If provided, the FPS count will only update and display if true.
+ */
+PerformanceDisplay.prototype.update = function (renderedThisFrame) {
+  const time = getTimestamp();
+  const updateDisplay = defaultValue(renderedThisFrame, true);
+
+  this._fpsFrameCount++;
+  const fpsElapsedTime = time - this._lastFpsSampleTime;
+  if (fpsElapsedTime > 1000) {
+    let fps = "N/A";
+    if (updateDisplay) {
+      fps = ((this._fpsFrameCount * 1000) / fpsElapsedTime) | 0;
+    }
+
+    this._fpsText.nodeValue = `${fps} FPS`;
+    this._lastFpsSampleTime = time;
+    this._fpsFrameCount = 0;
+  }
+
+  this._msFrameCount++;
+  const msElapsedTime = time - this._lastMsSampleTime;
+  if (msElapsedTime > 200) {
+    let ms = "N/A";
+    if (updateDisplay) {
+      ms = (msElapsedTime / this._msFrameCount).toFixed(2);
+    }
+
+    this._msText.nodeValue = `${ms} MS`;
+    this._lastMsSampleTime = time;
+    this._msFrameCount = 0;
+  }
+};
+
+/**
+ * Destroys the WebGL resources held by this object.
+ */
+PerformanceDisplay.prototype.destroy = function () {
+  return destroyObject(this);
+};
+export default PerformanceDisplay;

@@ -1,419 +1,770 @@
-/*global defineSuite*/
-defineSuite([
-         'Core/HeightmapTessellator',
-         'Core/Cartesian2',
-         'Core/Cartesian3',
-         'Core/Ellipsoid',
-         'Core/Extent',
-         'Core/Math',
-         'Core/WebMercatorProjection'
-     ], function(
-         HeightmapTessellator,
-         Cartesian2,
-         Cartesian3,
-         Ellipsoid,
-         Extent,
-         CesiumMath,
-         WebMercatorProjection) {
-    "use strict";
-    /*global jasmine,describe,xdescribe,it,xit,expect,beforeEach,afterEach,beforeAll,afterAll,spyOn,runs,waits,waitsFor*/
+import { Cartesian2 } from "../../Source/Cesium.js";
+import { Cartesian3 } from "../../Source/Cesium.js";
+import { Ellipsoid } from "../../Source/Cesium.js";
+import { HeightmapTessellator } from "../../Source/Cesium.js";
+import { Math as CesiumMath } from "../../Source/Cesium.js";
+import { Rectangle } from "../../Source/Cesium.js";
+import { WebMercatorProjection } from "../../Source/Cesium.js";
 
-    it('throws when heightmap is not provided', function() {
-        expect(function() {
-            HeightmapTessellator.computeVertices();
-        }).toThrowDeveloperError();
+describe("Scene/HeightmapTessellator", function () {
+  it("throws when heightmap is not provided", function () {
+    expect(function () {
+      HeightmapTessellator.computeVertices();
+    }).toThrowDeveloperError();
 
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                width : 2,
-                height : 2,
-                vertices : [],
-                nativeExtent : {
-                    west : 10.0,
-                    south : 20.0,
-                    east : 20.0,
-                    north : 30.0
-                },
-                skirtHeight : 10.0
-            });
-        }).toThrowDeveloperError();
+    expect(function () {
+      HeightmapTessellator.computeVertices({
+        width: 2,
+        height: 2,
+        vertices: [],
+        nativeRectangle: {
+          west: 10.0,
+          south: 20.0,
+          east: 20.0,
+          north: 30.0,
+        },
+        skirtHeight: 10.0,
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("throws when width or height is not provided", function () {
+    expect(function () {
+      HeightmapTessellator.computeVertices({
+        heightmap: [1.0, 2.0, 3.0, 4.0],
+        height: 2,
+        vertices: [],
+        nativeRectangle: {
+          west: 10.0,
+          south: 20.0,
+          east: 20.0,
+          north: 30.0,
+        },
+        skirtHeight: 10.0,
+      });
+    }).toThrowDeveloperError();
+
+    expect(function () {
+      HeightmapTessellator.computeVertices({
+        heightmap: [1.0, 2.0, 3.0, 4.0],
+        width: 2,
+        vertices: [],
+        nativeRectangle: {
+          west: 10.0,
+          south: 20.0,
+          east: 20.0,
+          north: 30.0,
+        },
+        skirtHeight: 10.0,
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("throws when nativeRectangle is not provided", function () {
+    expect(function () {
+      HeightmapTessellator.computeVertices({
+        heightmap: [1.0, 2.0, 3.0, 4.0],
+        width: 2,
+        height: 2,
+        vertices: [],
+        skirtHeight: 10.0,
+      });
+    }).toThrowDeveloperError();
+  });
+
+  it("throws when skirtHeight is not provided", function () {
+    expect(function () {
+      HeightmapTessellator.computeVertices({
+        heightmap: [1.0, 2.0, 3.0, 4.0],
+        width: 2,
+        height: 2,
+        vertices: [],
+        nativeRectangle: {
+          west: 10.0,
+          south: 20.0,
+          east: 20.0,
+          north: 30.0,
+        },
+      });
+    }).toThrowDeveloperError();
+  });
+
+  function checkExpectedVertex(
+    nativeRectangle,
+    i,
+    j,
+    width,
+    height,
+    index,
+    isEdge,
+    vertices,
+    heightmap,
+    ellipsoid,
+    skirtHeight
+  ) {
+    let latitude = CesiumMath.lerp(
+      nativeRectangle.north,
+      nativeRectangle.south,
+      j / (height - 1)
+    );
+    latitude = CesiumMath.toRadians(latitude);
+    let longitude = CesiumMath.lerp(
+      nativeRectangle.west,
+      nativeRectangle.east,
+      i / (width - 1)
+    );
+    longitude = CesiumMath.toRadians(longitude);
+
+    let heightSample = heightmap[j * width + i];
+
+    if (isEdge) {
+      heightSample -= skirtHeight;
+    }
+
+    const expectedVertexPosition = ellipsoid.cartographicToCartesian({
+      longitude: longitude,
+      latitude: latitude,
+      height: heightSample,
     });
 
-    it('throws when width or height is not provided', function() {
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                heightmap : [1.0, 2.0, 3.0, 4.0],
-                height : 2,
-                vertices : [],
-                nativeExtent : {
-                    west : 10.0,
-                    south : 20.0,
-                    east : 20.0,
-                    north : 30.0
-                },
-                skirtHeight : 10.0
-            });
-        }).toThrowDeveloperError();
+    index = index * 6;
+    const vertexPosition = new Cartesian3(
+      vertices[index],
+      vertices[index + 1],
+      vertices[index + 2]
+    );
 
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                heightmap : [1.0, 2.0, 3.0, 4.0],
-                width : 2,
-                vertices : [],
-                nativeExtent : {
-                    west : 10.0,
-                    south : 20.0,
-                    east : 20.0,
-                    north : 30.0
-                },
-                skirtHeight : 10.0
-            });
-        }).toThrowDeveloperError();
+    expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
+    expect(vertices[index + 3]).toEqual(heightSample);
+    expect(vertices[index + 4]).toEqualEpsilon(
+      i / (width - 1),
+      CesiumMath.EPSILON7
+    );
+    expect(vertices[index + 5]).toEqualEpsilon(
+      1.0 - j / (height - 1),
+      CesiumMath.EPSILON7
+    );
+  }
+
+  function checkExpectedQuantizedVertex(
+    nativeRectangle,
+    i,
+    j,
+    width,
+    height,
+    index,
+    isEdge,
+    vertices,
+    heightmap,
+    ellipsoid,
+    skirtHeight,
+    encoding
+  ) {
+    let latitude = CesiumMath.lerp(
+      nativeRectangle.north,
+      nativeRectangle.south,
+      j / (height - 1)
+    );
+    latitude = CesiumMath.toRadians(latitude);
+    let longitude = CesiumMath.lerp(
+      nativeRectangle.west,
+      nativeRectangle.east,
+      i / (width - 1)
+    );
+    longitude = CesiumMath.toRadians(longitude);
+
+    let heightSample = heightmap[j * width + i];
+
+    if (isEdge) {
+      heightSample -= skirtHeight;
+    }
+
+    const expectedVertexPosition = ellipsoid.cartographicToCartesian({
+      longitude: longitude,
+      latitude: latitude,
+      height: heightSample,
     });
 
-    it('throws when vertices is not provided', function() {
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                heightmap : [1.0, 2.0, 3.0, 4.0],
-                width : 2,
-                height : 2,
-                nativeExtent : {
-                    west : 10.0,
-                    south : 20.0,
-                    east : 20.0,
-                    north : 30.0
-                },
-                skirtHeight : 10.0
-            });
-        }).toThrowDeveloperError();
-    });
+    expect(encoding.decodePosition(vertices, index)).toEqualEpsilon(
+      expectedVertexPosition,
+      1.0
+    );
+  }
 
-    it('throws when nativeExtent is not provided', function() {
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                heightmap : [1.0, 2.0, 3.0, 4.0],
-                width : 2,
-                height : 2,
-                vertices : [],
-                skirtHeight : 10.0
-            });
-        }).toThrowDeveloperError();
-    });
+  it("creates mesh without skirt", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+      width: width,
+      height: height,
+      skirtHeight: 0.0,
+      nativeRectangle: {
+        west: 10.0,
+        south: 30.0,
+        east: 20.0,
+        north: 40.0,
+      },
+      rectangle: new Rectangle(
+        CesiumMath.toRadians(10.0),
+        CesiumMath.toRadians(30.0),
+        CesiumMath.toRadians(20.0),
+        CesiumMath.toRadians(40.0)
+      ),
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-    it('throws when skirtHeight is not provided', function() {
-        expect(function() {
-            HeightmapTessellator.computeVertices({
-                heightmap : [1.0, 2.0, 3.0, 4.0],
-                width : 2,
-                height : 2,
-                vertices : [],
-                nativeExtent : {
-                    west : 10.0,
-                    south : 20.0,
-                    east : 20.0,
-                    north : 30.0
-                }
-            });
-        }).toThrowDeveloperError();
-    });
+    const ellipsoid = Ellipsoid.WGS84;
+    const nativeRectangle = options.nativeRectangle;
 
-    it('creates mesh without skirt', function() {
-        var width = 3;
-        var height = 3;
-        var vertices = new Float32Array(width * height * 6);
-        var description = {
-            vertices : vertices,
-            heightmap : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            width : width,
-            height : height,
-            skirtHeight : 0.0,
-            nativeExtent : {
-                west : 10.0,
-                south : 30.0,
-                east : 20.0,
-                north : 40.0
-            },
-            extent : new Extent(
-                CesiumMath.toRadians(10.0),
-                CesiumMath.toRadians(30.0),
-                CesiumMath.toRadians(20.0),
-                CesiumMath.toRadians(40.0))
-        };
-        HeightmapTessellator.computeVertices(description);
+    let index = 0;
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var nativeExtent = description.nativeExtent;
+    for (let j = 0; j < height; ++j) {
+      for (let i = 0; i < width; ++i) {
+        checkExpectedVertex(
+          nativeRectangle,
+          i,
+          j,
+          width,
+          height,
+          index++,
+          false,
+          vertices,
+          options.heightmap,
+          ellipsoid,
+          options.skirtHeight
+        );
+      }
+    }
+  });
 
-        for (var j = 0; j < height; ++j) {
-            var latitude = CesiumMath.lerp(nativeExtent.north, nativeExtent.south, j / (height - 1));
-            latitude = CesiumMath.toRadians(latitude);
-            for (var i = 0; i < width; ++i) {
-                var longitude = CesiumMath.lerp(nativeExtent.west, nativeExtent.east, i / (width - 1));
-                longitude = CesiumMath.toRadians(longitude);
+  it("creates mesh with skirt", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+      width: width,
+      height: height,
+      skirtHeight: 10.0,
+      nativeRectangle: {
+        west: 10.0,
+        east: 20.0,
+        south: 30.0,
+        north: 40.0,
+      },
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-                var heightSample = description.heightmap[j * width + i];
+    const ellipsoid = Ellipsoid.WGS84;
+    const nativeRectangle = options.nativeRectangle;
 
-                var expectedVertexPosition = ellipsoid.cartographicToCartesian({
-                    longitude : longitude,
-                    latitude : latitude,
-                    height : heightSample
-                });
+    let i, j;
+    let index = 0;
 
-                var index = (j * width + i) * 6;
-                var vertexPosition = new Cartesian3(vertices[index], vertices[index + 1], vertices[index + 2]);
+    for (j = 0; j < height; ++j) {
+      for (i = 0; i < width; ++i) {
+        checkExpectedVertex(
+          nativeRectangle,
+          i,
+          j,
+          width,
+          height,
+          index++,
+          false,
+          vertices,
+          options.heightmap,
+          ellipsoid,
+          options.skirtHeight
+        );
+      }
+    }
 
-                expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
-                expect(vertices[index + 3]).toEqual(heightSample);
-                expect(vertices[index + 4]).toEqualEpsilon(i / (width - 1), CesiumMath.EPSILON7);
-                expect(vertices[index + 5]).toEqualEpsilon(1.0 - j / (height - 1), CesiumMath.EPSILON7);
-            }
-        }
-    });
+    // Heightmap is expected to be ordered from west to east and north to south,
+    // so flip i and j depending on how skirts are arranged.
+    for (j = 0; j < height; ++j) {
+      // West edge goes from south to north
+      checkExpectedVertex(
+        nativeRectangle,
+        0,
+        height - 1 - j,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight
+      );
+    }
 
-    it('creates mesh with skirt', function() {
-        var width = 3;
-        var height = 3;
-        var vertices = new Float32Array((width + 2) * (height + 2) * 6);
-        var description = {
-            vertices : vertices,
-            heightmap : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            width : width,
-            height : height,
-            skirtHeight : 10.0,
-            nativeExtent : {
-                west : 10.0,
-                east : 20.0,
-                south : 30.0,
-                north : 40.0
-            }
-        };
-        HeightmapTessellator.computeVertices(description);
+    for (i = 0; i < height; ++i) {
+      // South edge goes from east to west
+      checkExpectedVertex(
+        nativeRectangle,
+        width - 1 - i,
+        height - 1,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight
+      );
+    }
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var nativeExtent = description.nativeExtent;
+    for (j = 0; j < height; ++j) {
+      // East edge goes from north to south
+      checkExpectedVertex(
+        nativeRectangle,
+        width - 1,
+        j,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight
+      );
+    }
 
-        for (var j = -1; j <= height; ++j) {
-            var realJ = CesiumMath.clamp(j, 0, height - 1);
-            var latitude = CesiumMath.lerp(nativeExtent.north, nativeExtent.south, realJ / (height - 1));
-            latitude = CesiumMath.toRadians(latitude);
-            for (var i = -1; i <= width; ++i) {
-                var realI = CesiumMath.clamp(i, 0, width - 1);
-                var longitude = CesiumMath.lerp(nativeExtent.west, nativeExtent.east, realI / (width - 1));
-                longitude = CesiumMath.toRadians(longitude);
+    for (i = 0; i < height; ++i) {
+      // North edge goes from west to east
+      checkExpectedVertex(
+        nativeRectangle,
+        i,
+        0,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight
+      );
+    }
+  });
 
-                var heightSample = description.heightmap[realJ * width + realI];
+  it("creates quantized mesh", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+      width: width,
+      height: height,
+      skirtHeight: 10.0,
+      nativeRectangle: {
+        west: 0.01,
+        east: 0.02,
+        south: 0.01,
+        north: 0.02,
+      },
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-                if (realI !== i || realJ !== j) {
-                    heightSample -= description.skirtHeight;
-                }
+    const ellipsoid = Ellipsoid.WGS84;
+    const nativeRectangle = options.nativeRectangle;
 
-                var expectedVertexPosition = ellipsoid.cartographicToCartesian({
-                    longitude : longitude,
-                    latitude : latitude,
-                    height : heightSample
-                });
+    let i, j;
+    let index = 0;
 
-                var index = ((j + 1) * (width + 2) + i + 1) * 6;
-                var vertexPosition = new Cartesian3(vertices[index], vertices[index + 1], vertices[index + 2]);
+    for (j = 0; j < height; ++j) {
+      for (i = 0; i < width; ++i) {
+        checkExpectedQuantizedVertex(
+          nativeRectangle,
+          i,
+          j,
+          width,
+          height,
+          index++,
+          false,
+          vertices,
+          options.heightmap,
+          ellipsoid,
+          options.skirtHeight,
+          results.encoding
+        );
+      }
+    }
 
-                expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
-                expect(vertices[index + 3]).toEqual(heightSample);
-                expect(vertices[index + 4]).toEqualEpsilon(realI / (width - 1), CesiumMath.EPSILON7);
-                expect(vertices[index + 5]).toEqualEpsilon(1.0 - realJ / (height - 1), CesiumMath.EPSILON7);
-            }
-        }
-    });
+    // Heightmap is expected to be ordered from west to east and north to south,
+    // so flip i and j depending on how skirts are arranged.
+    for (j = 0; j < height; ++j) {
+      // West edge goes from south to north
+      checkExpectedQuantizedVertex(
+        nativeRectangle,
+        0,
+        height - 1 - j,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight,
+        results.encoding
+      );
+    }
 
-    it('tessellates web mercator heightmaps', function() {
-        var width = 3;
-        var height = 3;
-        var vertices = new Float32Array(width * height * 6);
-        var description = {
-            vertices : vertices,
-            heightmap : [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
-            width : width,
-            height : height,
-            skirtHeight : 0.0,
-            nativeExtent : {
-                west : 1000000.0,
-                east : 2000000.0,
-                south : 3000000.0,
-                north : 4000000.0
-            },
-            isGeographic : false
-        };
-        HeightmapTessellator.computeVertices(description);
+    for (i = 0; i < height; ++i) {
+      // South edge goes from east to west
+      checkExpectedQuantizedVertex(
+        nativeRectangle,
+        width - 1 - i,
+        height - 1,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight,
+        results.encoding
+      );
+    }
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var projection = new WebMercatorProjection(ellipsoid);
-        var nativeExtent = description.nativeExtent;
+    for (j = 0; j < height; ++j) {
+      // East edge goes from north to south
+      checkExpectedQuantizedVertex(
+        nativeRectangle,
+        width - 1,
+        j,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight,
+        results.encoding
+      );
+    }
 
-        var geographicSouthwest = projection.unproject(new Cartesian2(nativeExtent.west, nativeExtent.south));
-        var geographicNortheast = projection.unproject(new Cartesian2(nativeExtent.east, nativeExtent.north));
+    for (i = 0; i < height; ++i) {
+      // North edge goes from west to east
+      checkExpectedQuantizedVertex(
+        nativeRectangle,
+        i,
+        0,
+        width,
+        height,
+        index++,
+        true,
+        vertices,
+        options.heightmap,
+        ellipsoid,
+        options.skirtHeight,
+        results.encoding
+      );
+    }
+  });
 
-        for (var j = 0; j < height; ++j) {
-            var y = CesiumMath.lerp(nativeExtent.north, nativeExtent.south, j / (height - 1));
-            for (var i = 0; i < width; ++i) {
-                var x = CesiumMath.lerp(nativeExtent.west, nativeExtent.east, i / (width - 1));
+  it("tessellates web mercator heightmaps", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 9.0],
+      width: width,
+      height: height,
+      skirtHeight: 0.0,
+      nativeRectangle: {
+        west: 1000000.0,
+        east: 2000000.0,
+        south: 3000000.0,
+        north: 4000000.0,
+      },
+      isGeographic: false,
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-                var latLon = projection.unproject(new Cartesian2(x, y));
-                var longitude = latLon.longitude;
-                var latitude = latLon.latitude;
+    const ellipsoid = Ellipsoid.WGS84;
+    const projection = new WebMercatorProjection(ellipsoid);
+    const nativeRectangle = options.nativeRectangle;
 
-                var heightSample = description.heightmap[j * width + i];
+    const geographicSouthwest = projection.unproject(
+      new Cartesian2(nativeRectangle.west, nativeRectangle.south)
+    );
+    const geographicNortheast = projection.unproject(
+      new Cartesian2(nativeRectangle.east, nativeRectangle.north)
+    );
 
-                var expectedVertexPosition = ellipsoid.cartographicToCartesian({
-                    longitude : longitude,
-                    latitude : latitude,
-                    height : heightSample
-                });
+    for (let j = 0; j < height; ++j) {
+      const y = CesiumMath.lerp(
+        nativeRectangle.north,
+        nativeRectangle.south,
+        j / (height - 1)
+      );
+      for (let i = 0; i < width; ++i) {
+        const x = CesiumMath.lerp(
+          nativeRectangle.west,
+          nativeRectangle.east,
+          i / (width - 1)
+        );
 
-                var index = (j * width + i) * 6;
-                var vertexPosition = new Cartesian3(vertices[index], vertices[index + 1], vertices[index + 2]);
+        const latLon = projection.unproject(new Cartesian2(x, y));
+        const longitude = latLon.longitude;
+        const latitude = latLon.latitude;
 
-                var expectedU = (longitude - geographicSouthwest.longitude) / (geographicNortheast.longitude - geographicSouthwest.longitude);
-                var expectedV = (latitude - geographicSouthwest.latitude) / (geographicNortheast.latitude - geographicSouthwest.latitude);
+        const heightSample = options.heightmap[j * width + i];
 
-                expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
-                expect(vertices[index + 3]).toEqual(heightSample);
-                expect(vertices[index + 4]).toEqualEpsilon(expectedU, CesiumMath.EPSILON7);
-                expect(vertices[index + 5]).toEqualEpsilon(expectedV, CesiumMath.EPSILON7);
-            }
-        }
-    });
+        const expectedVertexPosition = ellipsoid.cartographicToCartesian({
+          longitude: longitude,
+          latitude: latitude,
+          height: heightSample,
+        });
 
-    it('supports multi-element little endian heights', function() {
-        var width = 3;
-        var height = 3;
-        var vertices = new Float32Array(width * height * 6);
-        var description = {
-            vertices : vertices,
-            heightmap : [1.0, 2.0, 100.0,
-                         3.0, 4.0, 100.0,
-                         5.0, 6.0, 100.0,
-                         7.0, 8.0, 100.0,
-                         9.0, 10.0, 100.0,
-                         11.0, 12.0, 100.0,
-                         13.0, 14.0, 100.0,
-                         15.0, 16.0, 100.0,
-                         17.0, 18.0, 100.0],
-            width : width,
-            height : height,
-            skirtHeight : 0.0,
-            nativeExtent : {
-                west : 10.0,
-                south : 30.0,
-                east : 20.0,
-                north : 40.0
-            },
-            extent : new Extent(
-                CesiumMath.toRadians(10.0),
-                CesiumMath.toRadians(30.0),
-                CesiumMath.toRadians(20.0),
-                CesiumMath.toRadians(40.0)),
-            structure : {
-                stride : 3,
-                elementsPerHeight : 2,
-                elementMultiplier : 10
-            }
-        };
-        HeightmapTessellator.computeVertices(description);
+        const index = (j * width + i) * 6;
+        const vertexPosition = new Cartesian3(
+          vertices[index],
+          vertices[index + 1],
+          vertices[index + 2]
+        );
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var nativeExtent = description.nativeExtent;
+        const expectedU =
+          (longitude - geographicSouthwest.longitude) /
+          (geographicNortheast.longitude - geographicSouthwest.longitude);
+        const expectedV =
+          (latitude - geographicSouthwest.latitude) /
+          (geographicNortheast.latitude - geographicSouthwest.latitude);
 
-        for (var j = 0; j < height; ++j) {
-            var latitude = CesiumMath.lerp(nativeExtent.north, nativeExtent.south, j / (height - 1));
-            latitude = CesiumMath.toRadians(latitude);
-            for (var i = 0; i < width; ++i) {
-                var longitude = CesiumMath.lerp(nativeExtent.west, nativeExtent.east, i / (width - 1));
-                longitude = CesiumMath.toRadians(longitude);
+        expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
+        expect(vertices[index + 3]).toEqual(heightSample);
+        expect(vertices[index + 4]).toEqualEpsilon(
+          expectedU,
+          CesiumMath.EPSILON7
+        );
+        expect(vertices[index + 5]).toEqualEpsilon(
+          expectedV,
+          CesiumMath.EPSILON7
+        );
+      }
+    }
+  });
 
-                var heightSampleIndex = (j * width + i) * description.structure.stride;
-                var heightSample = description.heightmap[heightSampleIndex] + description.heightmap[heightSampleIndex + 1] * 10.0;
+  it("supports multi-element little endian heights", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [
+        1.0,
+        2.0,
+        100.0,
+        3.0,
+        4.0,
+        100.0,
+        5.0,
+        6.0,
+        100.0,
+        7.0,
+        8.0,
+        100.0,
+        9.0,
+        10.0,
+        100.0,
+        11.0,
+        12.0,
+        100.0,
+        13.0,
+        14.0,
+        100.0,
+        15.0,
+        16.0,
+        100.0,
+        17.0,
+        18.0,
+        100.0,
+      ],
+      width: width,
+      height: height,
+      skirtHeight: 0.0,
+      nativeRectangle: {
+        west: 10.0,
+        south: 30.0,
+        east: 20.0,
+        north: 40.0,
+      },
+      rectangle: new Rectangle(
+        CesiumMath.toRadians(10.0),
+        CesiumMath.toRadians(30.0),
+        CesiumMath.toRadians(20.0),
+        CesiumMath.toRadians(40.0)
+      ),
+      structure: {
+        stride: 3,
+        elementsPerHeight: 2,
+        elementMultiplier: 10,
+      },
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-                var expectedVertexPosition = ellipsoid.cartographicToCartesian({
-                    longitude : longitude,
-                    latitude : latitude,
-                    height : heightSample
-                });
+    const ellipsoid = Ellipsoid.WGS84;
+    const nativeRectangle = options.nativeRectangle;
 
-                var index = (j * width + i) * 6;
-                var vertexPosition = new Cartesian3(vertices[index], vertices[index + 1], vertices[index + 2]);
+    for (let j = 0; j < height; ++j) {
+      let latitude = CesiumMath.lerp(
+        nativeRectangle.north,
+        nativeRectangle.south,
+        j / (height - 1)
+      );
+      latitude = CesiumMath.toRadians(latitude);
+      for (let i = 0; i < width; ++i) {
+        let longitude = CesiumMath.lerp(
+          nativeRectangle.west,
+          nativeRectangle.east,
+          i / (width - 1)
+        );
+        longitude = CesiumMath.toRadians(longitude);
 
-                expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
-                expect(vertices[index + 3]).toEqual(heightSample);
-                expect(vertices[index + 4]).toEqualEpsilon(i / (width - 1), CesiumMath.EPSILON7);
-                expect(vertices[index + 5]).toEqualEpsilon(1.0 - j / (height - 1), CesiumMath.EPSILON7);
-            }
-        }
-    });
+        const heightSampleIndex = (j * width + i) * options.structure.stride;
+        const heightSample =
+          options.heightmap[heightSampleIndex] +
+          options.heightmap[heightSampleIndex + 1] * 10.0;
 
-    it('supports multi-element big endian heights', function() {
-        var width = 3;
-        var height = 3;
-        var vertices = new Float32Array(width * height * 6);
-        var description = {
-            vertices : vertices,
-            heightmap : [1.0, 2.0, 100.0,
-                         3.0, 4.0, 100.0,
-                         5.0, 6.0, 100.0,
-                         7.0, 8.0, 100.0,
-                         9.0, 10.0, 100.0,
-                         11.0, 12.0, 100.0,
-                         13.0, 14.0, 100.0,
-                         15.0, 16.0, 100.0,
-                         17.0, 18.0, 100.0],
-            width : width,
-            height : height,
-            skirtHeight : 0.0,
-            nativeExtent : {
-                west : 10.0,
-                south : 30.0,
-                east : 20.0,
-                north : 40.0
-            },
-            extent : new Extent(
-                CesiumMath.toRadians(10.0),
-                CesiumMath.toRadians(30.0),
-                CesiumMath.toRadians(20.0),
-                CesiumMath.toRadians(40.0)),
-            structure : {
-                stride : 3,
-                elementsPerHeight : 2,
-                elementMultiplier : 10,
-                isBigEndian : true
-            }
-        };
-        HeightmapTessellator.computeVertices(description);
+        const expectedVertexPosition = ellipsoid.cartographicToCartesian({
+          longitude: longitude,
+          latitude: latitude,
+          height: heightSample,
+        });
 
-        var ellipsoid = Ellipsoid.WGS84;
-        var nativeExtent = description.nativeExtent;
+        const index = (j * width + i) * 6;
+        const vertexPosition = new Cartesian3(
+          vertices[index],
+          vertices[index + 1],
+          vertices[index + 2]
+        );
 
-        for (var j = 0; j < height; ++j) {
-            var latitude = CesiumMath.lerp(nativeExtent.north, nativeExtent.south, j / (height - 1));
-            latitude = CesiumMath.toRadians(latitude);
-            for (var i = 0; i < width; ++i) {
-                var longitude = CesiumMath.lerp(nativeExtent.west, nativeExtent.east, i / (width - 1));
-                longitude = CesiumMath.toRadians(longitude);
+        expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
+        expect(vertices[index + 3]).toEqual(heightSample);
+        expect(vertices[index + 4]).toEqualEpsilon(
+          i / (width - 1),
+          CesiumMath.EPSILON7
+        );
+        expect(vertices[index + 5]).toEqualEpsilon(
+          1.0 - j / (height - 1),
+          CesiumMath.EPSILON7
+        );
+      }
+    }
+  });
 
-                var heightSampleIndex = (j * width + i) * description.structure.stride;
-                var heightSample = description.heightmap[heightSampleIndex] * 10.0 + description.heightmap[heightSampleIndex + 1];
+  it("supports multi-element big endian heights", function () {
+    const width = 3;
+    const height = 3;
+    const options = {
+      heightmap: [
+        1.0,
+        2.0,
+        100.0,
+        3.0,
+        4.0,
+        100.0,
+        5.0,
+        6.0,
+        100.0,
+        7.0,
+        8.0,
+        100.0,
+        9.0,
+        10.0,
+        100.0,
+        11.0,
+        12.0,
+        100.0,
+        13.0,
+        14.0,
+        100.0,
+        15.0,
+        16.0,
+        100.0,
+        17.0,
+        18.0,
+        100.0,
+      ],
+      width: width,
+      height: height,
+      skirtHeight: 0.0,
+      nativeRectangle: {
+        west: 10.0,
+        south: 30.0,
+        east: 20.0,
+        north: 40.0,
+      },
+      rectangle: new Rectangle(
+        CesiumMath.toRadians(10.0),
+        CesiumMath.toRadians(30.0),
+        CesiumMath.toRadians(20.0),
+        CesiumMath.toRadians(40.0)
+      ),
+      structure: {
+        stride: 3,
+        elementsPerHeight: 2,
+        elementMultiplier: 10,
+        isBigEndian: true,
+      },
+    };
+    const results = HeightmapTessellator.computeVertices(options);
+    const vertices = results.vertices;
 
-                var expectedVertexPosition = ellipsoid.cartographicToCartesian({
-                    longitude : longitude,
-                    latitude : latitude,
-                    height : heightSample
-                });
+    const ellipsoid = Ellipsoid.WGS84;
+    const nativeRectangle = options.nativeRectangle;
 
-                var index = (j * width + i) * 6;
-                var vertexPosition = new Cartesian3(vertices[index], vertices[index + 1], vertices[index + 2]);
+    for (let j = 0; j < height; ++j) {
+      let latitude = CesiumMath.lerp(
+        nativeRectangle.north,
+        nativeRectangle.south,
+        j / (height - 1)
+      );
+      latitude = CesiumMath.toRadians(latitude);
+      for (let i = 0; i < width; ++i) {
+        let longitude = CesiumMath.lerp(
+          nativeRectangle.west,
+          nativeRectangle.east,
+          i / (width - 1)
+        );
+        longitude = CesiumMath.toRadians(longitude);
 
-                expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
-                expect(vertices[index + 3]).toEqual(heightSample);
-                expect(vertices[index + 4]).toEqualEpsilon(i / (width - 1), CesiumMath.EPSILON7);
-                expect(vertices[index + 5]).toEqualEpsilon(1.0 - j / (height - 1), CesiumMath.EPSILON7);
-            }
-        }
-    });
+        const heightSampleIndex = (j * width + i) * options.structure.stride;
+        const heightSample =
+          options.heightmap[heightSampleIndex] * 10.0 +
+          options.heightmap[heightSampleIndex + 1];
+
+        const expectedVertexPosition = ellipsoid.cartographicToCartesian({
+          longitude: longitude,
+          latitude: latitude,
+          height: heightSample,
+        });
+
+        const index = (j * width + i) * 6;
+        const vertexPosition = new Cartesian3(
+          vertices[index],
+          vertices[index + 1],
+          vertices[index + 2]
+        );
+
+        expect(vertexPosition).toEqualEpsilon(expectedVertexPosition, 1.0);
+        expect(vertices[index + 3]).toEqual(heightSample);
+        expect(vertices[index + 4]).toEqualEpsilon(
+          i / (width - 1),
+          CesiumMath.EPSILON7
+        );
+        expect(vertices[index + 5]).toEqualEpsilon(
+          1.0 - j / (height - 1),
+          CesiumMath.EPSILON7
+        );
+      }
+    }
+  });
 });
