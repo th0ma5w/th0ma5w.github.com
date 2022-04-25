@@ -1,22 +1,17 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <!-- Use correct character set. -->
-    <meta charset="utf-8" />
-    <!-- Tell IE to use the latest, best version. -->
-    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
-    <!-- Make the application on mobile take up the full browser screen and disable user scaling. -->
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, maximum-scale=1, minimum-scale=1, user-scalable=no"
-    />
-    <title>Cesium Viewer</title>
-    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon" />
-    <link rel="stylesheet" href="CesiumViewer.css" media="screen" />
-  </head>
-  <body style="background: #000">
-    <div id="cesiumContainer" class="fullWindow"></div>
-    <div id="loadingIndicator" class="loadingIndicator"></div>
-    <script src="CesiumViewer.js" type="module"></script>
-  </body>
+<head>
+  <meta charset="utf-8">
+  <!-- Include the CesiumJS JavaScript and CSS files -->
+  <script src="https://cesium.com/downloads/cesiumjs/releases/1.92/Build/Cesium/Cesium.js"></script>
+  <link href="https://cesium.com/downloads/cesiumjs/releases/1.92/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+</head>
+<body>
+  <div id="cesiumContainer"></div>
+  <script>
+    Cesium.Ion.defaultAccessToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJqdGkiOiJkMDU2OTMzZi02MjQ3LTRiOTAtOTg5Yi0xY2U3ZDgxMTlhN2UiLCJpZCI6OTExNDYsImlhdCI6MTY1MDg2NTI4N30.7_mMynDdoNssn_yNZBNEmWZjfODhiMlklazkIymy9bo';
+  </script>
+  <script src="CesiumViewer.js"></script>
+ </div>
+</body>
 </html>
